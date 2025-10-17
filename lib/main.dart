@@ -64,6 +64,10 @@ class Product extends HiveObject {
   late String? imageUrl;
   @HiveField(6)
   late String? listingUrl;
+  @HiveField(7)
+  late int totalSales;
+  @HiveField(8)
+  late double totalRevenue;
 
   Product({
     required this.id,
@@ -73,6 +77,8 @@ class Product extends HiveObject {
     required this.largeVariation,
     this.imageUrl,
     this.listingUrl,
+    this.totalSales = 0,
+    this.totalRevenue = 0.0,
   });
 
   // For JSON serialization
@@ -84,6 +90,8 @@ class Product extends HiveObject {
     'largeVariation': largeVariation.toJson(),
     'imageUrl': imageUrl,
     'listingUrl': listingUrl,
+    'totalSales': totalSales,
+    'totalRevenue': totalRevenue,
   };
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -94,6 +102,8 @@ class Product extends HiveObject {
     largeVariation: ProductVariation.fromJson(json['largeVariation']),
     imageUrl: json['imageUrl'] as String?,
     listingUrl: json['listingUrl'] as String?,
+    totalSales: (json['totalSales'] as num? ?? 0).toInt(),
+    totalRevenue: (json['totalRevenue'] as num? ?? 0.0).toDouble(),
   );
 }
 
@@ -205,13 +215,15 @@ class ProductAdapter extends TypeAdapter<Product> {
       largeVariation: fields[4] as ProductVariation,
       imageUrl: fields[5] as String?,
       listingUrl: fields[6] as String?,
+      totalSales: fields.containsKey(7) ? fields[7] as int : 0,
+      totalRevenue: fields.containsKey(8) ? fields[8] as double : 0.0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -225,7 +237,11 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(5)
       ..write(obj.imageUrl)
       ..writeByte(6)
-      ..write(obj.listingUrl);
+      ..write(obj.listingUrl)
+      ..writeByte(7)
+      ..write(obj.totalSales)
+      ..writeByte(8)
+      ..write(obj.totalRevenue);
   }
 }
 
@@ -297,6 +313,11 @@ class RestoreData extends DataEvent {
   final String jsonData;
   RestoreData(this.jsonData);
 }
+class IncrementSales extends DataEvent {
+  final String productId;
+  final double saleAmount;
+  IncrementSales(this.productId, this.saleAmount);
+}
 
 class DataState {
   final List<Product> products;
@@ -315,6 +336,7 @@ class DataBloc extends Bloc<DataEvent, DataState> {
     on<DeleteProduct>(_onDeleteProduct);
     on<UpdateSettings>(_onUpdateSettings);
     on<RestoreData>(_onRestoreData);
+    on<IncrementSales>(_onIncrementSales);
   }
 
   void _onLoadData(LoadData event, Emitter<DataState> emit) {
@@ -368,6 +390,16 @@ class DataBloc extends Bloc<DataEvent, DataState> {
       print("Error restoring data: $e");
     }
   }
+
+  Future<void> _onIncrementSales(IncrementSales event, Emitter<DataState> emit) async {
+    final product = productBox.get(event.productId);
+    if (product != null) {
+      product.totalSales += 1;
+      product.totalRevenue += event.saleAmount;
+      await productBox.put(event.productId, product);
+      add(LoadData());
+    }
+  }
 }
 
 // --- Main App Entry Point ---
@@ -398,20 +430,54 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Etsy Pricing Calculator',
         themeMode: ThemeMode.dark,
-        darkTheme: ThemeData.dark().copyWith(
-          primaryColor: Colors.teal,
-          scaffoldBackgroundColor: const Color(0xFF121212),
+        darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
+          primaryColor: const Color(0xFF00BFA5),
+          scaffoldBackgroundColor: const Color(0xFF0D1117),
           colorScheme: const ColorScheme.dark(
-            primary: Colors.teal,
-            secondary: Colors.tealAccent,
+            primary: Color(0xFF00BFA5),
+            secondary: Color(0xFF64FFDA),
+            surface: Color(0xFF161B22),
+            background: Color(0xFF0D1117),
+            onPrimary: Colors.black,
+            onSecondary: Colors.black,
           ),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF1E1E1E),
-            elevation: 1,
+            backgroundColor: Color(0xFF161B22),
+            elevation: 0,
+            centerTitle: true,
           ),
-          cardColor: const Color(0xFF1E1E1E),
+          cardTheme: CardThemeData(
+            color: const Color(0xFF161B22),
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00BFA5),
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 2,
+            ),
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: const Color(0xFF161B22),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF30363D)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF30363D)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF00BFA5), width: 2),
+            ),
+          ),
         ),
-        home: const HomePage(),
+        home: const MainNavigationPage(),
       ),
     );
   }
@@ -419,9 +485,66 @@ class MyApp extends StatelessWidget {
 
 // --- Part 4: UI Screens ---
 
+// --- Main Navigation Page with Bottom Navigation Bar ---
+class MainNavigationPage extends StatefulWidget {
+  const MainNavigationPage({super.key});
+
+  @override
+  _MainNavigationPageState createState() => _MainNavigationPageState();
+}
+
+class _MainNavigationPageState extends State<MainNavigationPage> {
+  int _currentIndex = 0;
+  
+  final List<Widget> _pages = const [
+    HomePage(),
+    StatisticsPage(),
+    SettingsPage(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _pages[_currentIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'Products',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
+            label: 'Statistics',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // --- Home Page ---
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  _HomePageState createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  String _searchQuery = '';
 
   Future<void> _launchURL(String? urlString) async {
     if (urlString != null && urlString.isNotEmpty) {
@@ -446,83 +569,1272 @@ class HomePage extends StatelessWidget {
     return parts.join(' | ');
   }
 
+  void _showAddSaleDialog(BuildContext context, Product product) {
+    final priceController = TextEditingController();
+    
+    // Calculate average price from variations
+    double avgPrice = 0;
+    int count = 0;
+    if (product.smallVariation.etsyPrice > 0) {
+      avgPrice += product.smallVariation.etsyPrice;
+      count++;
+    }
+    if (product.mediumVariation.etsyPrice > 0) {
+      avgPrice += product.mediumVariation.etsyPrice;
+      count++;
+    }
+    if (product.largeVariation.etsyPrice > 0) {
+      avgPrice += product.largeVariation.etsyPrice;
+      count++;
+    }
+    if (count > 0) {
+      avgPrice = avgPrice / count;
+      priceController.text = avgPrice.toStringAsFixed(2);
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Sale'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Product: ${product.name}'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'Sale Amount (\$)',
+                prefixText: '\$',
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final amount = double.tryParse(priceController.text) ?? 0;
+              if (amount > 0) {
+                context.read<DataBloc>().add(IncrementSales(product.id, amount));
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Added sale for ${product.name}'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            child: const Text('Add Sale'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Priced Products'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
-            },
+      ),
+      body: Column(
+        children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search products...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value.toLowerCase();
+                });
+              },
+            ),
+          ),
+          // Products list
+          Expanded(
+            child: BlocBuilder<DataBloc, DataState>(
+              builder: (context, state) {
+                if (state.products.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey[700]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No products yet',
+                          style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap + to add your first product',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                
+                // Filter products based on search query
+                final filteredProducts = state.products.where((product) {
+                  return product.name.toLowerCase().contains(_searchQuery);
+                }).toList();
+                
+                if (filteredProducts.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 80, color: Colors.grey[700]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No products found',
+                          style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                
+                return ListView.builder(
+                  itemCount: filteredProducts.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemBuilder: (context, index) {
+                    final product = filteredProducts[index];
+                    final hasImage = product.imageUrl != null && product.imageUrl!.isNotEmpty;
+                    final hasListing = product.listingUrl != null && product.listingUrl!.isNotEmpty;
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProductDetailPage(product: product),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            children: [
+                              // Product image or icon
+                              Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: hasImage
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.network(
+                                          product.imageUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) =>
+                                              Icon(
+                                                Icons.image_not_supported,
+                                                color: Theme.of(context).colorScheme.primary,
+                                                size: 30,
+                                              ),
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.widgets,
+                                        size: 30,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                              ),
+                              const SizedBox(width: 16),
+                              // Product details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product.name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _formatPrices(product),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Sales: ${product.totalSales} • Revenue: \$${product.totalRevenue.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[500],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Action buttons
+                              Column(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle, size: 28),
+                                    color: Theme.of(context).colorScheme.primary,
+                                    onPressed: () {
+                                      // Show dialog to add sale
+                                      _showAddSaleDialog(context, product);
+                                    },
+                                    tooltip: 'Add Sale (+1)',
+                                  ),
+                                  if (hasListing)
+                                    IconButton(
+                                      icon: const Icon(Icons.open_in_new, size: 18),
+                                      onPressed: () => _launchURL(product.listingUrl),
+                                      tooltip: 'Open Etsy Listing',
+                                    ),
+                                ],
+                              ),
+                              const Icon(Icons.chevron_right, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
-      body: BlocBuilder<DataBloc, DataState>(
-        builder: (context, state) {
-          if (state.products.isEmpty) {
-            return const Center(child: Text('No products yet. Add one!'));
-          }
-          return ListView.builder(
-            itemCount: state.products.length,
-            itemBuilder: (context, index) {
-              final product = state.products[index];
-              final hasImage = product.imageUrl != null && product.imageUrl!.isNotEmpty;
-              final hasListing = product.listingUrl != null && product.listingUrl!.isNotEmpty;
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: ListTile(
-                  leading: hasImage
-                      ? SizedBox(
-                          width: 50,
-                          height: 50,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8.0),
-                            child: Image.network(
-                              product.imageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const Icon(Icons.image_not_supported),
-                            ),
-                          ),
-                        )
-                      : const Icon(Icons.widgets, size: 40),
-                  title: Text(product.name),
-                  subtitle: Text(_formatPrices(product)),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if(hasListing)
-                        IconButton(
-                          icon: const Icon(Icons.open_in_new),
-                          onPressed: () => _launchURL(product.listingUrl),
-                          tooltip: 'Open Etsy Listing',
-                        ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailPage(product: product)));
-                  },
-                ),
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('Add Product'),
         onPressed: () {
-           Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductDetailPage()));
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductDetailPage()));
         },
       ),
     );
   }
 }
 
+
+// --- Statistics Page ---
+class StatisticsPage extends StatelessWidget {
+  const StatisticsPage({super.key});
+
+  Map<String, dynamic> _calculateStatistics(DataState state) {
+    if (state.products.isEmpty) {
+      return {
+        'totalProducts': 0,
+        'avgProfit': 0.0,
+        'totalPotentialRevenue': 0.0,
+        'avgPrice': 0.0,
+        'totalVariations': 0,
+        'bestProduct': null,
+        'worstProduct': null,
+        'profitableProducts': 0,
+        'totalSales': 0,
+        'totalActualRevenue': 0.0,
+      };
+    }
+
+    double totalRevenue = 0;
+    double totalProfit = 0;
+    int variationCount = 0;
+    Product? bestProduct;
+    Product? worstProduct;
+    int maxSales = 0;
+    int minSales = 999999;
+    int profitableProducts = 0;
+    int totalSalesCount = 0;
+    double totalActualRevenue = 0;
+
+    for (var product in state.products) {
+      double productTotalProfit = 0;
+      double productTotalRevenue = 0;
+      int productVariations = 0;
+
+      // Add sales tracking
+      totalSalesCount += product.totalSales;
+      totalActualRevenue += product.totalRevenue;
+
+      if (product.smallVariation.etsyPrice > 0) {
+        productTotalRevenue += product.smallVariation.etsyPrice;
+        productTotalProfit += product.smallVariation.profit;
+        variationCount++;
+        productVariations++;
+      }
+      if (product.mediumVariation.etsyPrice > 0) {
+        productTotalRevenue += product.mediumVariation.etsyPrice;
+        productTotalProfit += product.mediumVariation.profit;
+        variationCount++;
+        productVariations++;
+      }
+      if (product.largeVariation.etsyPrice > 0) {
+        productTotalRevenue += product.largeVariation.etsyPrice;
+        productTotalProfit += product.largeVariation.profit;
+        variationCount++;
+        productVariations++;
+      }
+
+      if (productVariations > 0) {
+        totalRevenue += productTotalRevenue;
+        totalProfit += productTotalProfit;
+        
+        double avgProductProfit = productTotalProfit / productVariations;
+        if (avgProductProfit > 0) profitableProducts++;
+        
+        // Use sales as the primary performance metric
+        if (product.totalSales >= maxSales) {
+          maxSales = product.totalSales;
+          bestProduct = product;
+        }
+        if (product.totalSales <= minSales && product.totalSales > 0) {
+          minSales = product.totalSales;
+          worstProduct = product;
+        }
+      }
+    }
+
+    return {
+      'totalProducts': state.products.length,
+      'avgProfit': variationCount > 0 ? totalProfit / variationCount : 0.0,
+      'totalPotentialRevenue': totalRevenue,
+      'avgPrice': variationCount > 0 ? totalRevenue / variationCount : 0.0,
+      'totalVariations': variationCount,
+      'bestProduct': bestProduct,
+      'worstProduct': worstProduct,
+      'profitableProducts': profitableProducts,
+      'totalProfit': totalProfit,
+      'totalSales': totalSalesCount,
+      'totalActualRevenue': totalActualRevenue,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Statistics Dashboard'),
+      ),
+      body: BlocBuilder<DataBloc, DataState>(
+        builder: (context, state) {
+          final stats = _calculateStatistics(state);
+          
+          if (state.products.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.analytics_outlined, size: 80, color: Colors.grey[700]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No data yet',
+                    style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add products to see statistics',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Overview Cards
+                Text(
+                  'Overview',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.inventory_2,
+                        label: 'Products',
+                        value: '${stats['totalProducts']}',
+                        color: const Color(0xFF00BFA5),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.style,
+                        label: 'Variations',
+                        value: '${stats['totalVariations']}',
+                        color: const Color(0xFF64FFDA),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.trending_up,
+                        label: 'Profitable',
+                        value: '${stats['profitableProducts']}',
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.attach_money,
+                        label: 'Avg Price',
+                        value: '\$${stats['avgPrice'].toStringAsFixed(2)}',
+                        color: Colors.amber,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.shopping_cart,
+                        label: 'Total Sales',
+                        value: '${stats['totalSales']}',
+                        color: Colors.purple,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.paid,
+                        label: 'Revenue',
+                        value: '\$${stats['totalActualRevenue'].toStringAsFixed(2)}',
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Financial Overview
+                Text(
+                  'Financial Overview',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      children: [
+                        _FinancialRow(
+                          label: 'Total Potential Revenue',
+                          value: '\$${stats['totalPotentialRevenue'].toStringAsFixed(2)}',
+                          icon: Icons.show_chart,
+                          color: const Color(0xFF00BFA5),
+                        ),
+                        const Divider(height: 24),
+                        _FinancialRow(
+                          label: 'Total Profit',
+                          value: '\$${stats['totalProfit'].toStringAsFixed(2)}',
+                          icon: Icons.account_balance_wallet,
+                          color: Colors.green,
+                        ),
+                        const Divider(height: 24),
+                        _FinancialRow(
+                          label: 'Avg Profit per Variation',
+                          value: '\$${stats['avgProfit'].toStringAsFixed(2)}',
+                          icon: Icons.savings,
+                          color: Colors.amber,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Best & Worst Products
+                Text(
+                  'Product Performance',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (stats['bestProduct'] != null)
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.green,
+                        child: Icon(Icons.star, color: Colors.white),
+                      ),
+                      title: const Text('Best Performer (Most Sales)'),
+                      subtitle: Text('${stats['bestProduct'].name}\n${stats['bestProduct'].totalSales} sales • \$${stats['bestProduct'].totalRevenue.toStringAsFixed(2)} revenue'),
+                      isThreeLine: true,
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProductDetailPage(product: stats['bestProduct']),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                if (stats['worstProduct'] != null && stats['worstProduct'] != stats['bestProduct'])
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.orange,
+                        child: Icon(Icons.trending_down, color: Colors.white),
+                      ),
+                      title: const Text('Needs Attention (Low Sales)'),
+                      subtitle: Text('${stats['worstProduct'].name}\n${stats['worstProduct'].totalSales} sales • \$${stats['worstProduct'].totalRevenue.toStringAsFixed(2)} revenue'),
+                      isThreeLine: true,
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProductDetailPage(product: stats['worstProduct']),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                const SizedBox(height: 24),
+
+                // Cost Breakdown
+                Text(
+                  'Cost Settings',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        _CostRow('Filament Cost', '\$${state.settings.filamentCostPerKg.toStringAsFixed(2)}/kg'),
+                        _CostRow('Electricity Cost', '\$${state.settings.electricityCostKwh.toStringAsFixed(2)}/kWh'),
+                        _CostRow('Labor & Handling', '\$${state.settings.laborCost.toStringAsFixed(2)}'),
+                        _CostRow('License Fee', '\$${state.settings.licenseFee.toStringAsFixed(2)}'),
+                        _CostRow('Shipping & Packaging', '\$${state.settings.shippingCost.toStringAsFixed(2)}'),
+                        _CostRow('Etsy Fees', '${state.settings.etsyFeesPercent.toStringAsFixed(1)}%'),
+                        _CostRow('Target Profit Margin', '${state.settings.profitMargin.toStringAsFixed(1)}%'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Bulk Pricing Tool
+                Text(
+                  'Quick Tools',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const BulkDiscountCalculator()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: Colors.purple.withOpacity(0.2),
+                            child: const Icon(Icons.calculate, color: Colors.purple),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Bulk Discount Calculator',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Calculate prices for bulk orders',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ProfitMarginAnalyzer()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: Colors.blue.withOpacity(0.2),
+                            child: const Icon(Icons.timeline, color: Colors.blue),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Profit Margin Analyzer',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Compare margins across products',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[400],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FinancialRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _FinancialRow({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CircleAvatar(
+          backgroundColor: color.withOpacity(0.2),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CostRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _CostRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 14)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- Bulk Discount Calculator Tool ---
+class BulkDiscountCalculator extends StatefulWidget {
+  const BulkDiscountCalculator({super.key});
+
+  @override
+  _BulkDiscountCalculatorState createState() => _BulkDiscountCalculatorState();
+}
+
+class _BulkDiscountCalculatorState extends State<BulkDiscountCalculator> {
+  final _quantityController = TextEditingController(text: '1');
+  final _priceController = TextEditingController(text: '0');
+  final _discountController = TextEditingController(text: '0');
+  
+  double _totalOriginal = 0;
+  double _totalWithDiscount = 0;
+  double _savings = 0;
+  double _pricePerUnit = 0;
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _priceController.dispose();
+    _discountController.dispose();
+    super.dispose();
+  }
+
+  void _calculate() {
+    final quantity = int.tryParse(_quantityController.text) ?? 0;
+    final price = double.tryParse(_priceController.text) ?? 0;
+    final discount = double.tryParse(_discountController.text) ?? 0;
+
+    if (quantity > 0 && price > 0) {
+      setState(() {
+        _totalOriginal = quantity * price;
+        _totalWithDiscount = _totalOriginal * (1 - discount / 100);
+        _savings = _totalOriginal - _totalWithDiscount;
+        _pricePerUnit = _totalWithDiscount / quantity;
+      });
+    }
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label, {String? suffix}) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        suffixText: suffix,
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (_) => _calculate(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Bulk Discount Calculator'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.shopping_cart, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Order Details',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(_quantityController, 'Quantity', suffix: 'items'),
+                    const SizedBox(height: 16),
+                    _buildTextField(_priceController, 'Price per Item', suffix: '\$'),
+                    const SizedBox(height: 16),
+                    _buildTextField(_discountController, 'Bulk Discount', suffix: '%'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (_totalOriginal > 0) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.receipt, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Pricing Breakdown',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      _BulkPriceRow(
+                        'Original Total',
+                        '\$${_totalOriginal.toStringAsFixed(2)}',
+                        Colors.grey,
+                      ),
+                      const SizedBox(height: 12),
+                      _BulkPriceRow(
+                        'Discount Savings',
+                        '-\$${_savings.toStringAsFixed(2)}',
+                        Colors.orange,
+                      ),
+                      const Divider(height: 24),
+                      _BulkPriceRow(
+                        'Total with Discount',
+                        '\$${_totalWithDiscount.toStringAsFixed(2)}',
+                        const Color(0xFF00BFA5),
+                      ),
+                      const SizedBox(height: 12),
+                      _BulkPriceRow(
+                        'Price per Unit',
+                        '\$${_pricePerUnit.toStringAsFixed(2)}',
+                        Colors.tealAccent,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                color: Colors.purple.withOpacity(0.1),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lightbulb, color: Colors.purple),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Tip: Common bulk discounts are 10% for 5+ items, 15% for 10+ items, and 20% for 20+ items.',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BulkPriceRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _BulkPriceRow(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 15),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// --- Profit Margin Analyzer Tool ---
+class ProfitMarginAnalyzer extends StatelessWidget {
+  const ProfitMarginAnalyzer({super.key});
+
+  List<Map<String, dynamic>> _analyzeProducts(List<Product> products) {
+    List<Map<String, dynamic>> analysis = [];
+    
+    for (var product in products) {
+      final variations = [
+        {'size': 'Small', 'variation': product.smallVariation},
+        {'size': 'Medium', 'variation': product.mediumVariation},
+        {'size': 'Large', 'variation': product.largeVariation},
+      ];
+      
+      for (var v in variations) {
+        final variation = v['variation'] as ProductVariation;
+        if (variation.etsyPrice > 0) {
+          final marginPercent = (variation.profit / variation.etsyPrice) * 100;
+          analysis.add({
+            'product': product,
+            'size': v['size'],
+            'price': variation.etsyPrice,
+            'profit': variation.profit,
+            'marginPercent': marginPercent,
+            'cost': variation.etsyPrice - variation.profit,
+          });
+        }
+      }
+    }
+    
+    // Sort by margin percentage, highest first
+    analysis.sort((a, b) => b['marginPercent'].compareTo(a['marginPercent']));
+    return analysis;
+  }
+
+  Color _getMarginColor(double marginPercent) {
+    if (marginPercent >= 40) return Colors.green;
+    if (marginPercent >= 30) return Colors.lightGreen;
+    if (marginPercent >= 20) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _getMarginRating(double marginPercent) {
+    if (marginPercent >= 40) return 'Excellent';
+    if (marginPercent >= 30) return 'Good';
+    if (marginPercent >= 20) return 'Fair';
+    return 'Low';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profit Margin Analyzer'),
+      ),
+      body: BlocBuilder<DataBloc, DataState>(
+        builder: (context, state) {
+          if (state.products.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.timeline, size: 80, color: Colors.grey[700]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No products to analyze',
+                    style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add products to see margin analysis',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final analysis = _analyzeProducts(state.products);
+          
+          if (analysis.isEmpty) {
+            return const Center(
+              child: Text('No priced variations to analyze'),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  color: Colors.blue.withOpacity(0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.blue),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Profit margin = (Profit / Price) × 100%\nHigher margins mean better profitability.',
+                            style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'All Products by Margin',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...analysis.map((item) {
+                  final product = item['product'] as Product;
+                  final marginPercent = item['marginPercent'] as double;
+                  final color = _getMarginColor(marginPercent);
+                  final rating = _getMarginRating(marginPercent);
+                  
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product.name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${item['size']} variant',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  rating,
+                                  style: TextStyle(
+                                    color: color,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Price',
+                                  '\$${item['price'].toStringAsFixed(2)}',
+                                  Colors.grey,
+                                ),
+                              ),
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Cost',
+                                  '\$${item['cost'].toStringAsFixed(2)}',
+                                  Colors.orange,
+                                ),
+                              ),
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Profit',
+                                  '\$${item['profit'].toStringAsFixed(2)}',
+                                  Colors.green,
+                                ),
+                              ),
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Margin',
+                                  '${marginPercent.toStringAsFixed(1)}%',
+                                  color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MarginDetailColumn extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _MarginDetailColumn(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[500],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 // --- Settings Page ---
 class SettingsPage extends StatefulWidget {
@@ -606,6 +1918,164 @@ class _SettingsPageState extends State<SettingsPage> {
       }
   }
 
+  Future<void> _importSalesFromCSV() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+
+    if (result != null) {
+      final fileBytes = result.files.single.bytes;
+      if (fileBytes != null) {
+        try {
+          final csvString = utf8.decode(fileBytes);
+          final lines = csvString.split('\n');
+          
+          // Skip header row
+          final dataLines = lines.skip(1).where((line) => line.trim().isNotEmpty);
+          
+          // Map to track sales by product name
+          final salesMap = <String, Map<String, dynamic>>{};
+          
+          for (var line in dataLines) {
+            // Simple CSV parsing (handles basic cases)
+            final fields = _parseCSVLine(line);
+            if (fields.length >= 12) {
+              final itemName = fields[1].replaceAll('"', '').trim();
+              final quantity = int.tryParse(fields[3]) ?? 1;
+              final price = double.tryParse(fields[4]) ?? 0.0;
+              final itemTotal = double.tryParse(fields[11]) ?? 0.0;
+              
+              // Aggregate by product name
+              if (!salesMap.containsKey(itemName)) {
+                salesMap[itemName] = {'count': 0, 'revenue': 0.0};
+              }
+              salesMap[itemName]!['count'] = (salesMap[itemName]!['count'] as int) + quantity;
+              salesMap[itemName]!['revenue'] = (salesMap[itemName]!['revenue'] as double) + itemTotal;
+            }
+          }
+          
+          // Match products and update sales
+          final products = context.read<DataBloc>().state.products;
+          int matchedCount = 0;
+          
+          for (var product in products) {
+            // Try to match product name (fuzzy matching)
+            String? matchedName;
+            for (var csvName in salesMap.keys) {
+              if (_fuzzyMatch(product.name, csvName)) {
+                matchedName = csvName;
+                break;
+              }
+            }
+            
+            if (matchedName != null) {
+              final sales = salesMap[matchedName]!;
+              product.totalSales = sales['count'] as int;
+              product.totalRevenue = sales['revenue'] as double;
+              context.read<DataBloc>().add(UpdateProduct(product));
+              matchedCount++;
+            }
+          }
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Imported sales for $matchedCount products!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error importing CSV: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+  
+  List<String> _parseCSVLine(String line) {
+    List<String> fields = [];
+    StringBuffer currentField = StringBuffer();
+    bool inQuotes = false;
+    
+    for (int i = 0; i < line.length; i++) {
+      final char = line[i];
+      if (char == '"') {
+        inQuotes = !inQuotes;
+        currentField.write(char);
+      } else if (char == ',' && !inQuotes) {
+        fields.add(currentField.toString());
+        currentField.clear();
+      } else {
+        currentField.write(char);
+      }
+    }
+    fields.add(currentField.toString());
+    return fields;
+  }
+  
+  bool _fuzzyMatch(String productName, String csvName) {
+    // Remove common words and compare
+    final cleanProduct = productName.toLowerCase()
+        .replaceAll('figurine', '')
+        .replaceAll('sculpture', '')
+        .replaceAll('modern', '')
+        .replaceAll('3d print', '')
+        .replaceAll(':', '')
+        .replaceAll('-', '')
+        .replaceAll('the ', '')
+        .replaceAll('matte black', 'black')
+        .replaceAll('sculpted', '')
+        .trim();
+    
+    final cleanCSV = csvName.toLowerCase()
+        .replaceAll('figurine', '')
+        .replaceAll('sculpture', '')
+        .replaceAll('modern', '')
+        .replaceAll('3d print', '')
+        .replaceAll(':', '')
+        .replaceAll('-', '')
+        .replaceAll('the ', '')
+        .replaceAll('matte black', 'black')
+        .replaceAll('sculpted', '')
+        .trim();
+    
+    // Check if one contains the other or they're similar
+    return cleanProduct.contains(cleanCSV) || 
+           cleanCSV.contains(cleanProduct) ||
+           _levenshteinDistance(cleanProduct, cleanCSV) < 5;
+  }
+  
+  int _levenshteinDistance(String s1, String s2) {
+    if (s1.length > s2.length) {
+      return _levenshteinDistance(s2, s1);
+    }
+    
+    List<int> costs = List.generate(s2.length + 1, (i) => i);
+    
+    for (int i = 1; i <= s1.length; i++) {
+      int lastCost = i - 1;
+      costs[0] = i;
+      
+      for (int j = 1; j <= s2.length; j++) {
+        int newCost = costs[j];
+        costs[j] = s1[i - 1] == s2[j - 1]
+            ? lastCost
+            : 1 + [lastCost, costs[j], costs[j - 1]].reduce((a, b) => a < b ? a : b);
+        lastCost = newCost;
+      }
+    }
+    
+    return costs[s2.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -615,36 +2085,107 @@ class _SettingsPageState extends State<SettingsPage> {
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
-            Text('Calculation Settings', style: Theme.of(context).textTheme.titleLarge),
-            const Divider(),
-            _buildTextField('filamentCostPerKg', 'Filament Cost (\$/kg)'),
-            _buildTextField('electricityCostKwh', 'Electricity Cost (\$/kWh)'),
-            _buildTextField('laborCost', 'Labor & Handling (\$)'),
-            _buildTextField('licenseFee', 'License Fee (\$)'),
-            _buildTextField('shippingCost', 'Shipping & Packaging (\$)'),
-            _buildTextField('etsyFeesPercent', 'Etsy Fees (%)'),
-            _buildTextField('etsyListingFee', 'Etsy Listing Fee (\$)'),
-            _buildTextField('profitMargin', 'Desired Profit Margin (%)'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.calculate, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Calculation Settings',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField('filamentCostPerKg', 'Filament Cost (\$/kg)'),
+                    _buildTextField('electricityCostKwh', 'Electricity Cost (\$/kWh)'),
+                    _buildTextField('laborCost', 'Labor & Handling (\$)'),
+                    _buildTextField('licenseFee', 'License Fee (\$)'),
+                    _buildTextField('shippingCost', 'Shipping & Packaging (\$)'),
+                    _buildTextField('etsyFeesPercent', 'Etsy Fees (%)'),
+                    _buildTextField('etsyListingFee', 'Etsy Listing Fee (\$)'),
+                    _buildTextField('profitMargin', 'Desired Profit Margin (%)'),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _saveSettings,
-              child: const Text('Save Settings'),
+            SizedBox(
+              height: 50,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('Save Settings', style: TextStyle(fontSize: 16)),
+                onPressed: _saveSettings,
+              ),
             ),
             const SizedBox(height: 30),
-            Text('Data Management', style: Theme.of(context).textTheme.titleLarge),
-            const Divider(),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.backup),
-              label: const Text('Backup Data'),
-              onPressed: _backupData,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.restore),
-              label: const Text('Restore Data'),
-              onPressed: _restoreData,
-               style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.storage, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Data Management',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.backup),
+                        label: const Text('Backup Data'),
+                        onPressed: _backupData,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.restore),
+                        label: const Text('Restore Data'),
+                        onPressed: _restoreData,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.file_upload),
+                        label: const Text('Import Sales from CSV'),
+                        onPressed: _importSalesFromCSV,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -881,43 +2422,91 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                   _buildTextField(_nameController, 'Product Name'),
-                   const SizedBox(height: 12),
-                   _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
-                   const SizedBox(height: 12),
-                   _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
-                ],
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Product Information',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(_nameController, 'Product Name'),
+                      const SizedBox(height: 12),
+                      _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
+                      const SizedBox(height: 12),
+                      _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'Small'),
-                Tab(text: 'Medium'),
-                Tab(text: 'Large'),
-              ],
-            ),
-            SizedBox(
-              height: 150,
-              child: TabBarView(
-                controller: _tabController,
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
                 children: [
-                  _buildVariationTab(_sTimeController, _sGramController),
-                  _buildVariationTab(_mTimeController, _mGramController),
-                  _buildVariationTab(_lTimeController, _lGramController),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Product Variations',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TabBar(
+                    controller: _tabController,
+                    labelColor: Theme.of(context).colorScheme.primary,
+                    tabs: const [
+                      Tab(text: 'Small'),
+                      Tab(text: 'Medium'),
+                      Tab(text: 'Large'),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 180,
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildVariationTab(_sTimeController, _sGramController),
+                        _buildVariationTab(_mTimeController, _mGramController),
+                        _buildVariationTab(_lTimeController, _lGramController),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-              onPressed: _calculateAndSave,
-              child: Text(_isEditing ? 'Recalculate & Save' : 'Recalculate & Save'),
+            SizedBox(
+              height: 54,
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.calculate),
+                label: Text(
+                  _isEditing ? 'Recalculate & Save' : 'Calculate & Save',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                onPressed: _calculateAndSave,
+              ),
             ),
             const SizedBox(height: 20),
             if (_pricingResult.isNotEmpty)
@@ -968,22 +2557,31 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   Widget _buildResultsCard() {
     return Card(
         child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(20.0),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                    const Text('Pricing Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
+                    Row(
+                      children: [
+                        Icon(Icons.receipt_long, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Pricing Breakdown',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: const [
-                        SizedBox(width: 50, child: Text('Size', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 60, child: Text('Cost', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                        SizedBox(width: 60, child: Text('Profit', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                        SizedBox(width: 80, child: Text('Etsy Price', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.end)),
+                        SizedBox(width: 50, child: Text('Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                        SizedBox(width: 60, child: Text('Cost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                        SizedBox(width: 60, child: Text('Profit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                        SizedBox(width: 80, child: Text('Etsy Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.end)),
                       ],
                     ),
-                    const Divider(),
+                    const Divider(height: 16),
                     ..._pricingResult.entries.map((entry) {
                       return _ResultRow(
                           entry.key,
