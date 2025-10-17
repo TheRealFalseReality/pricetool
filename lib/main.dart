@@ -1012,6 +1012,103 @@ class StatisticsPage extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 24),
+
+                // Bulk Pricing Tool
+                Text(
+                  'Quick Tools',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const BulkDiscountCalculator()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: Colors.purple.withOpacity(0.2),
+                            child: const Icon(Icons.calculate, color: Colors.purple),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Bulk Discount Calculator',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Calculate prices for bulk orders',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ProfitMarginAnalyzer()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: Colors.blue.withOpacity(0.2),
+                            child: const Icon(Icons.timeline, color: Colors.blue),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Profit Margin Analyzer',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Compare margins across products',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           );
@@ -1132,6 +1229,451 @@ class _CostRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// --- Bulk Discount Calculator Tool ---
+class BulkDiscountCalculator extends StatefulWidget {
+  const BulkDiscountCalculator({super.key});
+
+  @override
+  _BulkDiscountCalculatorState createState() => _BulkDiscountCalculatorState();
+}
+
+class _BulkDiscountCalculatorState extends State<BulkDiscountCalculator> {
+  final _quantityController = TextEditingController(text: '1');
+  final _priceController = TextEditingController(text: '0');
+  final _discountController = TextEditingController(text: '0');
+  
+  double _totalOriginal = 0;
+  double _totalWithDiscount = 0;
+  double _savings = 0;
+  double _pricePerUnit = 0;
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _priceController.dispose();
+    _discountController.dispose();
+    super.dispose();
+  }
+
+  void _calculate() {
+    final quantity = int.tryParse(_quantityController.text) ?? 0;
+    final price = double.tryParse(_priceController.text) ?? 0;
+    final discount = double.tryParse(_discountController.text) ?? 0;
+
+    if (quantity > 0 && price > 0) {
+      setState(() {
+        _totalOriginal = quantity * price;
+        _totalWithDiscount = _totalOriginal * (1 - discount / 100);
+        _savings = _totalOriginal - _totalWithDiscount;
+        _pricePerUnit = _totalWithDiscount / quantity;
+      });
+    }
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label, {String? suffix}) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        suffixText: suffix,
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (_) => _calculate(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Bulk Discount Calculator'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.shopping_cart, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Order Details',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(_quantityController, 'Quantity', suffix: 'items'),
+                    const SizedBox(height: 16),
+                    _buildTextField(_priceController, 'Price per Item', suffix: '\$'),
+                    const SizedBox(height: 16),
+                    _buildTextField(_discountController, 'Bulk Discount', suffix: '%'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (_totalOriginal > 0) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.receipt, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Pricing Breakdown',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      _BulkPriceRow(
+                        'Original Total',
+                        '\$${_totalOriginal.toStringAsFixed(2)}',
+                        Colors.grey,
+                      ),
+                      const SizedBox(height: 12),
+                      _BulkPriceRow(
+                        'Discount Savings',
+                        '-\$${_savings.toStringAsFixed(2)}',
+                        Colors.orange,
+                      ),
+                      const Divider(height: 24),
+                      _BulkPriceRow(
+                        'Total with Discount',
+                        '\$${_totalWithDiscount.toStringAsFixed(2)}',
+                        const Color(0xFF00BFA5),
+                      ),
+                      const SizedBox(height: 12),
+                      _BulkPriceRow(
+                        'Price per Unit',
+                        '\$${_pricePerUnit.toStringAsFixed(2)}',
+                        Colors.tealAccent,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                color: Colors.purple.withOpacity(0.1),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lightbulb, color: Colors.purple),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Tip: Common bulk discounts are 10% for 5+ items, 15% for 10+ items, and 20% for 20+ items.',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BulkPriceRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _BulkPriceRow(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 15),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// --- Profit Margin Analyzer Tool ---
+class ProfitMarginAnalyzer extends StatelessWidget {
+  const ProfitMarginAnalyzer({super.key});
+
+  List<Map<String, dynamic>> _analyzeProducts(List<Product> products) {
+    List<Map<String, dynamic>> analysis = [];
+    
+    for (var product in products) {
+      final variations = [
+        {'size': 'Small', 'variation': product.smallVariation},
+        {'size': 'Medium', 'variation': product.mediumVariation},
+        {'size': 'Large', 'variation': product.largeVariation},
+      ];
+      
+      for (var v in variations) {
+        final variation = v['variation'] as ProductVariation;
+        if (variation.etsyPrice > 0) {
+          final marginPercent = (variation.profit / variation.etsyPrice) * 100;
+          analysis.add({
+            'product': product,
+            'size': v['size'],
+            'price': variation.etsyPrice,
+            'profit': variation.profit,
+            'marginPercent': marginPercent,
+            'cost': variation.etsyPrice - variation.profit,
+          });
+        }
+      }
+    }
+    
+    // Sort by margin percentage, highest first
+    analysis.sort((a, b) => b['marginPercent'].compareTo(a['marginPercent']));
+    return analysis;
+  }
+
+  Color _getMarginColor(double marginPercent) {
+    if (marginPercent >= 40) return Colors.green;
+    if (marginPercent >= 30) return Colors.lightGreen;
+    if (marginPercent >= 20) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _getMarginRating(double marginPercent) {
+    if (marginPercent >= 40) return 'Excellent';
+    if (marginPercent >= 30) return 'Good';
+    if (marginPercent >= 20) return 'Fair';
+    return 'Low';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profit Margin Analyzer'),
+      ),
+      body: BlocBuilder<DataBloc, DataState>(
+        builder: (context, state) {
+          if (state.products.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.timeline, size: 80, color: Colors.grey[700]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No products to analyze',
+                    style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add products to see margin analysis',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final analysis = _analyzeProducts(state.products);
+          
+          if (analysis.isEmpty) {
+            return const Center(
+              child: Text('No priced variations to analyze'),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  color: Colors.blue.withOpacity(0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.blue),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Profit margin = (Profit / Price) × 100%\nHigher margins mean better profitability.',
+                            style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'All Products by Margin',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...analysis.map((item) {
+                  final product = item['product'] as Product;
+                  final marginPercent = item['marginPercent'] as double;
+                  final color = _getMarginColor(marginPercent);
+                  final rating = _getMarginRating(marginPercent);
+                  
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product.name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${item['size']} variant',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  rating,
+                                  style: TextStyle(
+                                    color: color,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Price',
+                                  '\$${item['price'].toStringAsFixed(2)}',
+                                  Colors.grey,
+                                ),
+                              ),
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Cost',
+                                  '\$${item['cost'].toStringAsFixed(2)}',
+                                  Colors.orange,
+                                ),
+                              ),
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Profit',
+                                  '\$${item['profit'].toStringAsFixed(2)}',
+                                  Colors.green,
+                                ),
+                              ),
+                              Expanded(
+                                child: _MarginDetailColumn(
+                                  'Margin',
+                                  '${marginPercent.toStringAsFixed(1)}%',
+                                  color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MarginDetailColumn extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _MarginDetailColumn(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[500],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }
