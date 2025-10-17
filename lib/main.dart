@@ -64,6 +64,10 @@ class Product extends HiveObject {
   late String? imageUrl;
   @HiveField(6)
   late String? listingUrl;
+  @HiveField(7)
+  late int totalSales;
+  @HiveField(8)
+  late double totalRevenue;
 
   Product({
     required this.id,
@@ -73,6 +77,8 @@ class Product extends HiveObject {
     required this.largeVariation,
     this.imageUrl,
     this.listingUrl,
+    this.totalSales = 0,
+    this.totalRevenue = 0.0,
   });
 
   // For JSON serialization
@@ -84,6 +90,8 @@ class Product extends HiveObject {
     'largeVariation': largeVariation.toJson(),
     'imageUrl': imageUrl,
     'listingUrl': listingUrl,
+    'totalSales': totalSales,
+    'totalRevenue': totalRevenue,
   };
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -94,6 +102,8 @@ class Product extends HiveObject {
     largeVariation: ProductVariation.fromJson(json['largeVariation']),
     imageUrl: json['imageUrl'] as String?,
     listingUrl: json['listingUrl'] as String?,
+    totalSales: (json['totalSales'] as num? ?? 0).toInt(),
+    totalRevenue: (json['totalRevenue'] as num? ?? 0.0).toDouble(),
   );
 }
 
@@ -205,13 +215,15 @@ class ProductAdapter extends TypeAdapter<Product> {
       largeVariation: fields[4] as ProductVariation,
       imageUrl: fields[5] as String?,
       listingUrl: fields[6] as String?,
+      totalSales: fields.containsKey(7) ? fields[7] as int : 0,
+      totalRevenue: fields.containsKey(8) ? fields[8] as double : 0.0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -225,7 +237,11 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(5)
       ..write(obj.imageUrl)
       ..writeByte(6)
-      ..write(obj.listingUrl);
+      ..write(obj.listingUrl)
+      ..writeByte(7)
+      ..write(obj.totalSales)
+      ..writeByte(8)
+      ..write(obj.totalRevenue);
   }
 }
 
@@ -297,6 +313,11 @@ class RestoreData extends DataEvent {
   final String jsonData;
   RestoreData(this.jsonData);
 }
+class IncrementSales extends DataEvent {
+  final String productId;
+  final double saleAmount;
+  IncrementSales(this.productId, this.saleAmount);
+}
 
 class DataState {
   final List<Product> products;
@@ -315,6 +336,7 @@ class DataBloc extends Bloc<DataEvent, DataState> {
     on<DeleteProduct>(_onDeleteProduct);
     on<UpdateSettings>(_onUpdateSettings);
     on<RestoreData>(_onRestoreData);
+    on<IncrementSales>(_onIncrementSales);
   }
 
   void _onLoadData(LoadData event, Emitter<DataState> emit) {
@@ -366,6 +388,16 @@ class DataBloc extends Bloc<DataEvent, DataState> {
     } catch (e) {
       // Handle potential errors during restore
       print("Error restoring data: $e");
+    }
+  }
+
+  Future<void> _onIncrementSales(IncrementSales event, Emitter<DataState> emit) async {
+    final product = productBox.get(event.productId);
+    if (product != null) {
+      product.totalSales += 1;
+      product.totalRevenue += event.saleAmount;
+      await productBox.put(event.productId, product);
+      add(LoadData());
     }
   }
 }
@@ -537,6 +569,76 @@ class _HomePageState extends State<HomePage> {
     return parts.join(' | ');
   }
 
+  void _showAddSaleDialog(BuildContext context, Product product) {
+    final priceController = TextEditingController();
+    
+    // Calculate average price from variations
+    double avgPrice = 0;
+    int count = 0;
+    if (product.smallVariation.etsyPrice > 0) {
+      avgPrice += product.smallVariation.etsyPrice;
+      count++;
+    }
+    if (product.mediumVariation.etsyPrice > 0) {
+      avgPrice += product.mediumVariation.etsyPrice;
+      count++;
+    }
+    if (product.largeVariation.etsyPrice > 0) {
+      avgPrice += product.largeVariation.etsyPrice;
+      count++;
+    }
+    if (count > 0) {
+      avgPrice = avgPrice / count;
+      priceController.text = avgPrice.toStringAsFixed(2);
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Sale'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Product: ${product.name}'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'Sale Amount (\$)',
+                prefixText: '\$',
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final amount = double.tryParse(priceController.text) ?? 0;
+              if (amount > 0) {
+                context.read<DataBloc>().add(IncrementSales(product.id, amount));
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Added sale for ${product.name}'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            child: const Text('Add Sale'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -689,16 +791,37 @@ class _HomePageState extends State<HomePage> {
                                         color: Colors.grey[400],
                                       ),
                                     ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Sales: ${product.totalSales} • Revenue: \$${product.totalRevenue.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[500],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
                               // Action buttons
-                              if (hasListing)
-                                IconButton(
-                                  icon: const Icon(Icons.open_in_new, size: 20),
-                                  onPressed: () => _launchURL(product.listingUrl),
-                                  tooltip: 'Open Etsy Listing',
-                                ),
+                              Column(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle, size: 28),
+                                    color: Theme.of(context).colorScheme.primary,
+                                    onPressed: () {
+                                      // Show dialog to add sale
+                                      _showAddSaleDialog(context, product);
+                                    },
+                                    tooltip: 'Add Sale (+1)',
+                                  ),
+                                  if (hasListing)
+                                    IconButton(
+                                      icon: const Icon(Icons.open_in_new, size: 18),
+                                      onPressed: () => _launchURL(product.listingUrl),
+                                      tooltip: 'Open Etsy Listing',
+                                    ),
+                                ],
+                              ),
                               const Icon(Icons.chevron_right, color: Colors.grey),
                             ],
                           ),
@@ -739,6 +862,8 @@ class StatisticsPage extends StatelessWidget {
         'bestProduct': null,
         'worstProduct': null,
         'profitableProducts': 0,
+        'totalSales': 0,
+        'totalActualRevenue': 0.0,
       };
     }
 
@@ -747,14 +872,20 @@ class StatisticsPage extends StatelessWidget {
     int variationCount = 0;
     Product? bestProduct;
     Product? worstProduct;
-    double maxProfit = double.negativeInfinity;
-    double minProfit = double.infinity;
+    int maxSales = 0;
+    int minSales = 999999;
     int profitableProducts = 0;
+    int totalSalesCount = 0;
+    double totalActualRevenue = 0;
 
     for (var product in state.products) {
       double productTotalProfit = 0;
       double productTotalRevenue = 0;
       int productVariations = 0;
+
+      // Add sales tracking
+      totalSalesCount += product.totalSales;
+      totalActualRevenue += product.totalRevenue;
 
       if (product.smallVariation.etsyPrice > 0) {
         productTotalRevenue += product.smallVariation.etsyPrice;
@@ -782,12 +913,13 @@ class StatisticsPage extends StatelessWidget {
         double avgProductProfit = productTotalProfit / productVariations;
         if (avgProductProfit > 0) profitableProducts++;
         
-        if (avgProductProfit > maxProfit) {
-          maxProfit = avgProductProfit;
+        // Use sales as the primary performance metric
+        if (product.totalSales >= maxSales) {
+          maxSales = product.totalSales;
           bestProduct = product;
         }
-        if (avgProductProfit < minProfit) {
-          minProfit = avgProductProfit;
+        if (product.totalSales <= minSales && product.totalSales > 0) {
+          minSales = product.totalSales;
           worstProduct = product;
         }
       }
@@ -803,6 +935,8 @@ class StatisticsPage extends StatelessWidget {
       'worstProduct': worstProduct,
       'profitableProducts': profitableProducts,
       'totalProfit': totalProfit,
+      'totalSales': totalSalesCount,
+      'totalActualRevenue': totalActualRevenue,
     };
   }
 
@@ -893,6 +1027,28 @@ class StatisticsPage extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.shopping_cart,
+                        label: 'Total Sales',
+                        value: '${stats['totalSales']}',
+                        color: Colors.purple,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        icon: Icons.paid,
+                        label: 'Revenue',
+                        value: '\$${stats['totalActualRevenue'].toStringAsFixed(2)}',
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
                 
                 const SizedBox(height: 24),
                 
@@ -951,8 +1107,9 @@ class StatisticsPage extends StatelessWidget {
                         backgroundColor: Colors.green,
                         child: Icon(Icons.star, color: Colors.white),
                       ),
-                      title: const Text('Best Performer'),
-                      subtitle: Text(stats['bestProduct'].name),
+                      title: const Text('Best Performer (Most Sales)'),
+                      subtitle: Text('${stats['bestProduct'].name}\n${stats['bestProduct'].totalSales} sales • \$${stats['bestProduct'].totalRevenue.toStringAsFixed(2)} revenue'),
+                      isThreeLine: true,
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () {
                         Navigator.push(
@@ -972,8 +1129,9 @@ class StatisticsPage extends StatelessWidget {
                         backgroundColor: Colors.orange,
                         child: Icon(Icons.trending_down, color: Colors.white),
                       ),
-                      title: const Text('Needs Attention'),
-                      subtitle: Text(stats['worstProduct'].name),
+                      title: const Text('Needs Attention (Low Sales)'),
+                      subtitle: Text('${stats['worstProduct'].name}\n${stats['worstProduct'].totalSales} sales • \$${stats['worstProduct'].totalRevenue.toStringAsFixed(2)} revenue'),
+                      isThreeLine: true,
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () {
                         Navigator.push(
@@ -1760,6 +1918,164 @@ class _SettingsPageState extends State<SettingsPage> {
       }
   }
 
+  Future<void> _importSalesFromCSV() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+
+    if (result != null) {
+      final fileBytes = result.files.single.bytes;
+      if (fileBytes != null) {
+        try {
+          final csvString = utf8.decode(fileBytes);
+          final lines = csvString.split('\n');
+          
+          // Skip header row
+          final dataLines = lines.skip(1).where((line) => line.trim().isNotEmpty);
+          
+          // Map to track sales by product name
+          final salesMap = <String, Map<String, dynamic>>{};
+          
+          for (var line in dataLines) {
+            // Simple CSV parsing (handles basic cases)
+            final fields = _parseCSVLine(line);
+            if (fields.length >= 12) {
+              final itemName = fields[1].replaceAll('"', '').trim();
+              final quantity = int.tryParse(fields[3]) ?? 1;
+              final price = double.tryParse(fields[4]) ?? 0.0;
+              final itemTotal = double.tryParse(fields[11]) ?? 0.0;
+              
+              // Aggregate by product name
+              if (!salesMap.containsKey(itemName)) {
+                salesMap[itemName] = {'count': 0, 'revenue': 0.0};
+              }
+              salesMap[itemName]!['count'] = (salesMap[itemName]!['count'] as int) + quantity;
+              salesMap[itemName]!['revenue'] = (salesMap[itemName]!['revenue'] as double) + itemTotal;
+            }
+          }
+          
+          // Match products and update sales
+          final products = context.read<DataBloc>().state.products;
+          int matchedCount = 0;
+          
+          for (var product in products) {
+            // Try to match product name (fuzzy matching)
+            String? matchedName;
+            for (var csvName in salesMap.keys) {
+              if (_fuzzyMatch(product.name, csvName)) {
+                matchedName = csvName;
+                break;
+              }
+            }
+            
+            if (matchedName != null) {
+              final sales = salesMap[matchedName]!;
+              product.totalSales = sales['count'] as int;
+              product.totalRevenue = sales['revenue'] as double;
+              context.read<DataBloc>().add(UpdateProduct(product));
+              matchedCount++;
+            }
+          }
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Imported sales for $matchedCount products!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error importing CSV: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+  
+  List<String> _parseCSVLine(String line) {
+    List<String> fields = [];
+    StringBuffer currentField = StringBuffer();
+    bool inQuotes = false;
+    
+    for (int i = 0; i < line.length; i++) {
+      final char = line[i];
+      if (char == '"') {
+        inQuotes = !inQuotes;
+        currentField.write(char);
+      } else if (char == ',' && !inQuotes) {
+        fields.add(currentField.toString());
+        currentField.clear();
+      } else {
+        currentField.write(char);
+      }
+    }
+    fields.add(currentField.toString());
+    return fields;
+  }
+  
+  bool _fuzzyMatch(String productName, String csvName) {
+    // Remove common words and compare
+    final cleanProduct = productName.toLowerCase()
+        .replaceAll('figurine', '')
+        .replaceAll('sculpture', '')
+        .replaceAll('modern', '')
+        .replaceAll('3d print', '')
+        .replaceAll(':', '')
+        .replaceAll('-', '')
+        .replaceAll('the ', '')
+        .replaceAll('matte black', 'black')
+        .replaceAll('sculpted', '')
+        .trim();
+    
+    final cleanCSV = csvName.toLowerCase()
+        .replaceAll('figurine', '')
+        .replaceAll('sculpture', '')
+        .replaceAll('modern', '')
+        .replaceAll('3d print', '')
+        .replaceAll(':', '')
+        .replaceAll('-', '')
+        .replaceAll('the ', '')
+        .replaceAll('matte black', 'black')
+        .replaceAll('sculpted', '')
+        .trim();
+    
+    // Check if one contains the other or they're similar
+    return cleanProduct.contains(cleanCSV) || 
+           cleanCSV.contains(cleanProduct) ||
+           _levenshteinDistance(cleanProduct, cleanCSV) < 5;
+  }
+  
+  int _levenshteinDistance(String s1, String s2) {
+    if (s1.length > s2.length) {
+      return _levenshteinDistance(s2, s1);
+    }
+    
+    List<int> costs = List.generate(s2.length + 1, (i) => i);
+    
+    for (int i = 1; i <= s1.length; i++) {
+      int lastCost = i - 1;
+      costs[0] = i;
+      
+      for (int j = 1; j <= s2.length; j++) {
+        int newCost = costs[j];
+        costs[j] = s1[i - 1] == s2[j - 1]
+            ? lastCost
+            : 1 + [lastCost, costs[j], costs[j - 1]].reduce((a, b) => a < b ? a : b);
+        lastCost = newCost;
+      }
+    }
+    
+    return costs[s2.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1850,6 +2166,19 @@ class _SettingsPageState extends State<SettingsPage> {
                         onPressed: _restoreData,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.file_upload),
+                        label: const Text('Import Sales from CSV'),
+                        onPressed: _importSalesFromCSV,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
                           foregroundColor: Colors.white,
                         ),
                       ),
