@@ -14,6 +14,55 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 // --- Part 1: Database Models ---
 
+@HiveType(typeId: 3)
+class Category extends HiveObject {
+  @HiveField(0)
+  late String id;
+  @HiveField(1)
+  late String name;
+  @HiveField(2)
+  late double filamentCostPerKg;
+  @HiveField(3)
+  late double laborCost;
+  @HiveField(4)
+  late double licenseFee;
+  @HiveField(5)
+  late double shippingCost;
+  @HiveField(6)
+  late double profitMargin;
+
+  Category({
+    required this.id,
+    required this.name,
+    this.filamentCostPerKg = 17.50,
+    this.laborCost = 3.00,
+    this.licenseFee = 2.00,
+    this.shippingCost = 2.00,
+    this.profitMargin = 40.0,
+  });
+
+  // For JSON serialization
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'filamentCostPerKg': filamentCostPerKg,
+    'laborCost': laborCost,
+    'licenseFee': licenseFee,
+    'shippingCost': shippingCost,
+    'profitMargin': profitMargin,
+  };
+
+  factory Category.fromJson(Map<String, dynamic> json) => Category(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    filamentCostPerKg: (json['filamentCostPerKg'] as num).toDouble(),
+    laborCost: (json['laborCost'] as num).toDouble(),
+    licenseFee: (json['licenseFee'] as num).toDouble(),
+    shippingCost: (json['shippingCost'] as num).toDouble(),
+    profitMargin: (json['profitMargin'] as num).toDouble(),
+  );
+}
+
 @HiveType(typeId: 2)
 class ProductVariation extends HiveObject {
   @HiveField(0)
@@ -68,6 +117,8 @@ class Product extends HiveObject {
   late int totalSales;
   @HiveField(8)
   late double totalRevenue;
+  @HiveField(9)
+  late String categoryId;
 
   Product({
     required this.id,
@@ -79,6 +130,7 @@ class Product extends HiveObject {
     this.listingUrl,
     this.totalSales = 0,
     this.totalRevenue = 0.0,
+    required this.categoryId,
   });
 
   // For JSON serialization
@@ -92,6 +144,7 @@ class Product extends HiveObject {
     'listingUrl': listingUrl,
     'totalSales': totalSales,
     'totalRevenue': totalRevenue,
+    'categoryId': categoryId,
   };
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -104,65 +157,91 @@ class Product extends HiveObject {
     listingUrl: json['listingUrl'] as String?,
     totalSales: (json['totalSales'] as num? ?? 0).toInt(),
     totalRevenue: (json['totalRevenue'] as num? ?? 0.0).toDouble(),
+    categoryId: json['categoryId'] as String? ?? 'default_3d_models', // Default for backward compatibility
   );
 }
 
 @HiveType(typeId: 1)
 class Settings extends HiveObject {
   @HiveField(0)
-  late double filamentCostPerKg;
-  @HiveField(1)
   late double electricityCostKwh;
-  @HiveField(2)
-  late double laborCost;
-  @HiveField(3)
-  late double licenseFee;
-  @HiveField(4)
-  late double shippingCost;
-  @HiveField(5)
+  @HiveField(1)
   late double etsyFeesPercent;
-  @HiveField(6)
+  @HiveField(2)
   late double etsyListingFee;
-  @HiveField(7)
-  late double profitMargin;
 
   Settings.defaults() {
-    filamentCostPerKg = 17.50;
     electricityCostKwh = 0.15;
-    laborCost = 3.00;
-    licenseFee = 2.00;
-    shippingCost = 2.00;
     etsyFeesPercent = 9.5;
     etsyListingFee = 0.20;
-    profitMargin = 40.0;
   }
   
   // For JSON serialization
   Map<String, dynamic> toJson() => {
-    'filamentCostPerKg': filamentCostPerKg,
     'electricityCostKwh': electricityCostKwh,
-    'laborCost': laborCost,
-    'licenseFee': licenseFee,
-    'shippingCost': shippingCost,
     'etsyFeesPercent': etsyFeesPercent,
     'etsyListingFee': etsyListingFee,
-    'profitMargin': profitMargin,
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) {
     return Settings.defaults()
-      ..filamentCostPerKg = (json['filamentCostPerKg'] as num).toDouble()
       ..electricityCostKwh = (json['electricityCostKwh'] as num).toDouble()
-      ..laborCost = (json['laborCost'] as num).toDouble()
-      ..licenseFee = (json['licenseFee'] as num).toDouble()
-      ..shippingCost = (json['shippingCost'] as num).toDouble()
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num).toDouble()
-      ..etsyListingFee = (json['etsyListingFee'] as num).toDouble()
-      ..profitMargin = (json['profitMargin'] as num).toDouble();
+      ..etsyListingFee = (json['etsyListingFee'] as num).toDouble();
+  }
+  
+  // Helper method to create from old settings for backward compatibility
+  factory Settings.fromLegacy(Map<String, dynamic> json) {
+    return Settings.defaults()
+      ..electricityCostKwh = (json['electricityCostKwh'] as num? ?? 0.15).toDouble()
+      ..etsyFeesPercent = (json['etsyFeesPercent'] as num? ?? 9.5).toDouble()
+      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble();
   }
 }
 
 // --- Part 2: Manual Hive Type Adapters ---
+
+class CategoryAdapter extends TypeAdapter<Category> {
+  @override
+  final int typeId = 3;
+
+  @override
+  Category read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return Category(
+      id: fields[0] as String,
+      name: fields[1] as String,
+      filamentCostPerKg: fields[2] as double,
+      laborCost: fields[3] as double,
+      licenseFee: fields[4] as double,
+      shippingCost: fields[5] as double,
+      profitMargin: fields[6] as double,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, Category obj) {
+    writer
+      ..writeByte(7)
+      ..writeByte(0)
+      ..write(obj.id)
+      ..writeByte(1)
+      ..write(obj.name)
+      ..writeByte(2)
+      ..write(obj.filamentCostPerKg)
+      ..writeByte(3)
+      ..write(obj.laborCost)
+      ..writeByte(4)
+      ..write(obj.licenseFee)
+      ..writeByte(5)
+      ..write(obj.shippingCost)
+      ..writeByte(6)
+      ..write(obj.profitMargin);
+  }
+}
 
 class ProductVariationAdapter extends TypeAdapter<ProductVariation> {
   @override
@@ -217,13 +296,14 @@ class ProductAdapter extends TypeAdapter<Product> {
       listingUrl: fields[6] as String?,
       totalSales: fields.containsKey(7) ? fields[7] as int : 0,
       totalRevenue: fields.containsKey(8) ? fields[8] as double : 0.0,
+      categoryId: fields.containsKey(9) ? fields[9] as String : 'default_3d_models',
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -241,7 +321,9 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(7)
       ..write(obj.totalSales)
       ..writeByte(8)
-      ..write(obj.totalRevenue);
+      ..write(obj.totalRevenue)
+      ..writeByte(9)
+      ..write(obj.categoryId);
   }
 }
 
@@ -256,36 +338,21 @@ class SettingsAdapter extends TypeAdapter<Settings> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return Settings.defaults()
-      ..filamentCostPerKg = fields[0] as double
-      ..electricityCostKwh = fields[1] as double
-      ..laborCost = fields[2] as double
-      ..licenseFee = fields[3] as double
-      ..shippingCost = fields[4] as double
-      ..etsyFeesPercent = fields[5] as double
-      ..etsyListingFee = fields[6] as double
-      ..profitMargin = fields[7] as double;
+      ..electricityCostKwh = fields[0] as double
+      ..etsyFeesPercent = fields[1] as double
+      ..etsyListingFee = fields[2] as double;
   }
 
   @override
   void write(BinaryWriter writer, Settings obj) {
     writer
-      ..writeByte(8)
-      ..writeByte(0)
-      ..write(obj.filamentCostPerKg)
-      ..writeByte(1)
-      ..write(obj.electricityCostKwh)
-      ..writeByte(2)
-      ..write(obj.laborCost)
       ..writeByte(3)
-      ..write(obj.licenseFee)
-      ..writeByte(4)
-      ..write(obj.shippingCost)
-      ..writeByte(5)
+      ..writeByte(0)
+      ..write(obj.electricityCostKwh)
+      ..writeByte(1)
       ..write(obj.etsyFeesPercent)
-      ..writeByte(6)
-      ..write(obj.etsyListingFee)
-      ..writeByte(7)
-      ..write(obj.profitMargin);
+      ..writeByte(2)
+      ..write(obj.etsyListingFee);
   }
 }
 
@@ -309,6 +376,18 @@ class UpdateSettings extends DataEvent {
   final Settings settings;
   UpdateSettings(this.settings);
 }
+class AddCategory extends DataEvent {
+  final Category category;
+  AddCategory(this.category);
+}
+class UpdateCategory extends DataEvent {
+  final Category category;
+  UpdateCategory(this.category);
+}
+class DeleteCategory extends DataEvent {
+  final String id;
+  DeleteCategory(this.id);
+}
 class RestoreData extends DataEvent {
   final String jsonData;
   RestoreData(this.jsonData);
@@ -322,19 +401,24 @@ class IncrementSales extends DataEvent {
 class DataState {
   final List<Product> products;
   final Settings settings;
-  DataState({required this.products, required this.settings});
+  final List<Category> categories;
+  DataState({required this.products, required this.settings, required this.categories});
 }
 
 class DataBloc extends Bloc<DataEvent, DataState> {
   final Box<Product> productBox;
   final Box<Settings> settingsBox;
+  final Box<Category> categoryBox;
 
-  DataBloc(this.productBox, this.settingsBox) : super(DataState(products: [], settings: Settings.defaults())) {
+  DataBloc(this.productBox, this.settingsBox, this.categoryBox) : super(DataState(products: [], settings: Settings.defaults(), categories: [])) {
     on<LoadData>(_onLoadData);
     on<AddProduct>(_onAddProduct);
     on<UpdateProduct>(_onUpdateProduct);
     on<DeleteProduct>(_onDeleteProduct);
     on<UpdateSettings>(_onUpdateSettings);
+    on<AddCategory>(_onAddCategory);
+    on<UpdateCategory>(_onUpdateCategory);
+    on<DeleteCategory>(_onDeleteCategory);
     on<RestoreData>(_onRestoreData);
     on<IncrementSales>(_onIncrementSales);
   }
@@ -343,7 +427,20 @@ class DataBloc extends Bloc<DataEvent, DataState> {
     final products = productBox.values.toList();
     products.sort((a, b) => a.name.compareTo(b.name));
     final settings = settingsBox.get('main', defaultValue: Settings.defaults())!;
-    emit(DataState(products: products, settings: settings));
+    
+    // Load categories or create default if none exist
+    var categories = categoryBox.values.toList();
+    if (categories.isEmpty) {
+      final defaultCategory = Category(
+        id: 'default_3d_models',
+        name: '3D Models',
+      );
+      categoryBox.put(defaultCategory.id, defaultCategory);
+      categories = [defaultCategory];
+    }
+    categories.sort((a, b) => a.name.compareTo(b.name));
+    
+    emit(DataState(products: products, settings: settings, categories: categories));
   }
 
   Future<void> _onAddProduct(AddProduct event, Emitter<DataState> emit) async {
@@ -366,15 +463,79 @@ class DataBloc extends Bloc<DataEvent, DataState> {
     add(LoadData());
   }
 
+  Future<void> _onAddCategory(AddCategory event, Emitter<DataState> emit) async {
+    await categoryBox.put(event.category.id, event.category);
+    add(LoadData());
+  }
+
+  Future<void> _onUpdateCategory(UpdateCategory event, Emitter<DataState> emit) async {
+    await categoryBox.put(event.category.id, event.category);
+    add(LoadData());
+  }
+
+  Future<void> _onDeleteCategory(DeleteCategory event, Emitter<DataState> emit) async {
+    // Don't allow deletion of the last category
+    if (categoryBox.length <= 1) {
+      return;
+    }
+    
+    // Reassign products from deleted category to the first remaining category
+    final products = productBox.values.where((p) => p.categoryId == event.id).toList();
+    if (products.isNotEmpty) {
+      final remainingCategories = categoryBox.values.where((c) => c.id != event.id).toList();
+      if (remainingCategories.isNotEmpty) {
+        final newCategoryId = remainingCategories.first.id;
+        for (var product in products) {
+          product.categoryId = newCategoryId;
+          await productBox.put(product.id, product);
+        }
+      }
+    }
+    
+    await categoryBox.delete(event.id);
+    add(LoadData());
+  }
+
   Future<void> _onRestoreData(RestoreData event, Emitter<DataState> emit) async {
     try {
       final data = jsonDecode(event.jsonData) as Map<String, dynamic>;
       
-      // Restore Settings - Checks for the new 'alteredSettings' key first for new backups,
-      // but falls back to the old 'settings' key for backwards compatibility.
-      final settingsData = data['alteredSettings'] ?? data['settings'] as Map<String, dynamic>;
-      final newSettings = Settings.fromJson(settingsData);
-      await settingsBox.put('main', newSettings);
+      // Restore Settings
+      final settingsData = data['settings'] as Map<String, dynamic>?;
+      if (settingsData != null) {
+        final newSettings = settingsData.containsKey('filamentCostPerKg') 
+            ? Settings.fromLegacy(settingsData)  // Old format
+            : Settings.fromJson(settingsData);    // New format
+        await settingsBox.put('main', newSettings);
+      }
+
+      // Restore Categories
+      final categoriesData = data['categories'] as List?;
+      if (categoriesData != null && categoriesData.isNotEmpty) {
+        final newCategories = categoriesData.map((c) => Category.fromJson(c)).toList();
+        await categoryBox.clear();
+        for (var category in newCategories) {
+          await categoryBox.put(category.id, category);
+        }
+      } else {
+        // If no categories in backup, create default and migrate old settings
+        await categoryBox.clear();
+        final defaultCategory = Category(
+          id: 'default_3d_models',
+          name: '3D Models',
+        );
+        
+        // Migrate old settings values if they exist
+        if (settingsData != null && settingsData.containsKey('filamentCostPerKg')) {
+          defaultCategory.filamentCostPerKg = (settingsData['filamentCostPerKg'] as num? ?? 17.50).toDouble();
+          defaultCategory.laborCost = (settingsData['laborCost'] as num? ?? 3.00).toDouble();
+          defaultCategory.licenseFee = (settingsData['licenseFee'] as num? ?? 2.00).toDouble();
+          defaultCategory.shippingCost = (settingsData['shippingCost'] as num? ?? 2.00).toDouble();
+          defaultCategory.profitMargin = (settingsData['profitMargin'] as num? ?? 40.0).toDouble();
+        }
+        
+        await categoryBox.put(defaultCategory.id, defaultCategory);
+      }
 
       // Restore Products
       final productsData = data['products'] as List;
@@ -407,26 +568,29 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   
+  Hive.registerAdapter(CategoryAdapter());
   Hive.registerAdapter(ProductVariationAdapter());
   Hive.registerAdapter(ProductAdapter());
   Hive.registerAdapter(SettingsAdapter());
 
   final productBox = await Hive.openBox<Product>('products');
   final settingsBox = await Hive.openBox<Settings>('settings');
+  final categoryBox = await Hive.openBox<Category>('categories');
   
-  runApp(MyApp(productBox: productBox, settingsBox: settingsBox));
+  runApp(MyApp(productBox: productBox, settingsBox: settingsBox, categoryBox: categoryBox));
 }
 
 class MyApp extends StatelessWidget {
   final Box<Product> productBox;
   final Box<Settings> settingsBox;
+  final Box<Category> categoryBox;
 
-  const MyApp({super.key, required this.productBox, required this.settingsBox});
+  const MyApp({super.key, required this.productBox, required this.settingsBox, required this.categoryBox});
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => DataBloc(productBox, settingsBox)..add(LoadData()),
+      create: (context) => DataBloc(productBox, settingsBox, categoryBox)..add(LoadData()),
       child: MaterialApp(
         title: 'Etsy Pricing Calculator',
         themeMode: ThemeMode.dark,
@@ -545,6 +709,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String _searchQuery = '';
+  String? _selectedCategoryId; // null means "All Categories"
 
   Future<void> _launchURL(String? urlString) async {
     if (urlString != null && urlString.isNotEmpty) {
@@ -672,6 +837,58 @@ class _HomePageState extends State<HomePage> {
               },
             ),
           ),
+          // Category filter chips
+          BlocBuilder<DataBloc, DataState>(
+            builder: (context, state) {
+              if (state.categories.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              
+              return Container(
+                height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    // "All" chip
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FilterChip(
+                        label: Text('All (${state.products.length})'),
+                        selected: _selectedCategoryId == null,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedCategoryId = null;
+                          });
+                        },
+                        selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        checkmarkColor: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    // Category chips
+                    ...state.categories.map((category) {
+                      final productCount = state.products.where((p) => p.categoryId == category.id).length;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: FilterChip(
+                          label: Text('${category.name} ($productCount)'),
+                          selected: _selectedCategoryId == category.id,
+                          onSelected: (selected) {
+                            setState(() {
+                              _selectedCategoryId = selected ? category.id : null;
+                            });
+                          },
+                          selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                          checkmarkColor: Theme.of(context).colorScheme.primary,
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
           // Products list
           Expanded(
             child: BlocBuilder<DataBloc, DataState>(
@@ -697,9 +914,11 @@ class _HomePageState extends State<HomePage> {
                   );
                 }
                 
-                // Filter products based on search query
+                // Filter products based on search query and selected category
                 final filteredProducts = state.products.where((product) {
-                  return product.name.toLowerCase().contains(_searchQuery);
+                  final matchesSearch = product.name.toLowerCase().contains(_searchQuery);
+                  final matchesCategory = _selectedCategoryId == null || product.categoryId == _selectedCategoryId;
+                  return matchesSearch && matchesCategory;
                 }).toList();
                 
                 if (filteredProducts.isEmpty) {
@@ -1148,7 +1367,7 @@ class StatisticsPage extends StatelessWidget {
 
                 // Cost Breakdown
                 Text(
-                  'Cost Settings',
+                  'Global Settings',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -1158,14 +1377,26 @@ class StatisticsPage extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _CostRow('Filament Cost', '\$${state.settings.filamentCostPerKg.toStringAsFixed(2)}/kg'),
+                        Text(
+                          'Settings that apply to all categories:',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                        ),
+                        const SizedBox(height: 12),
                         _CostRow('Electricity Cost', '\$${state.settings.electricityCostKwh.toStringAsFixed(2)}/kWh'),
-                        _CostRow('Labor & Handling', '\$${state.settings.laborCost.toStringAsFixed(2)}'),
-                        _CostRow('License Fee', '\$${state.settings.licenseFee.toStringAsFixed(2)}'),
-                        _CostRow('Shipping & Packaging', '\$${state.settings.shippingCost.toStringAsFixed(2)}'),
                         _CostRow('Etsy Fees', '${state.settings.etsyFeesPercent.toStringAsFixed(1)}%'),
-                        _CostRow('Target Profit Margin', '${state.settings.profitMargin.toStringAsFixed(1)}%'),
+                        _CostRow('Etsy Listing Fee', '\$${state.settings.etsyListingFee.toStringAsFixed(2)}'),
+                        const Divider(height: 24),
+                        Text(
+                          'Category-specific settings (${state.categories.length} categories):',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Filament Cost, Labor, License Fee, Shipping, and Profit Margin vary by category',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                        ),
                       ],
                     ),
                   ),
@@ -1853,14 +2084,9 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     final settings = context.read<DataBloc>().state.settings;
     _controllers = {
-      'filamentCostPerKg': TextEditingController(text: settings.filamentCostPerKg.toString()),
       'electricityCostKwh': TextEditingController(text: settings.electricityCostKwh.toString()),
-      'laborCost': TextEditingController(text: settings.laborCost.toString()),
-      'licenseFee': TextEditingController(text: settings.licenseFee.toString()),
-      'shippingCost': TextEditingController(text: settings.shippingCost.toString()),
       'etsyFeesPercent': TextEditingController(text: settings.etsyFeesPercent.toString()),
       'etsyListingFee': TextEditingController(text: settings.etsyListingFee.toString()),
-      'profitMargin': TextEditingController(text: settings.profitMargin.toString()),
     };
   }
   
@@ -1876,16 +2102,69 @@ class _SettingsPageState extends State<SettingsPage> {
       context.read<DataBloc>().add(UpdateSettings(newSettings));
       
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings Saved!'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('Global Settings Saved!'), backgroundColor: Colors.green),
       );
-      Navigator.pop(context);
     }
+  }
+  
+  void _showAddCategoryDialog() {
+    final nameController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Category'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Category Name',
+            hintText: 'e.g., Resin Models, Miniatures',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.trim().isNotEmpty) {
+                final newCategory = Category(
+                  id: const Uuid().v4(),
+                  name: nameController.text.trim(),
+                );
+                context.read<DataBloc>().add(AddCategory(newCategory));
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Category "${newCategory.name}" added!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _editCategory(Category category) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CategoryEditPage(category: category),
+      ),
+    );
   }
 
   Future<void> _backupData() async {
     final dataState = context.read<DataBloc>().state;
     final backupData = {
-      'alteredSettings': dataState.settings.toJson(),
+      'settings': dataState.settings.toJson(),
+      'categories': dataState.categories.map((c) => c.toJson()).toList(),
       'products': dataState.products.map((p) => p.toJson()).toList(),
     };
     final jsonString = jsonEncode(backupData);
@@ -2080,6 +2359,320 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Business Settings')),
+      body: BlocBuilder<DataBloc, DataState>(
+        builder: (context, state) {
+          return Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                // Global Settings Card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.public, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Global Settings',
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'These settings apply to all categories',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField('electricityCostKwh', 'Electricity Cost (\$/kWh)'),
+                        _buildTextField('etsyFeesPercent', 'Etsy Fees (%)'),
+                        _buildTextField('etsyListingFee', 'Etsy Listing Fee (\$)'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 50,
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.save),
+                    label: const Text('Save Global Settings', style: TextStyle(fontSize: 16)),
+                    onPressed: _saveSettings,
+                  ),
+                ),
+                const SizedBox(height: 30),
+                
+                // Categories Section
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.category, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Product Categories',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle),
+                              color: Theme.of(context).colorScheme.primary,
+                              onPressed: _showAddCategoryDialog,
+                              tooltip: 'Add Category',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Each category can have different calculation settings',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                        ),
+                        const SizedBox(height: 16),
+                        ...state.categories.map((category) {
+                          final productCount = state.products.where((p) => p.categoryId == category.id).length;
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                                child: Icon(
+                                  Icons.widgets,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                              title: Text(
+                                category.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Text('$productCount products • Margin: ${category.profitMargin.toStringAsFixed(1)}%'),
+                              trailing: const Icon(Icons.edit),
+                              onTap: () => _editCategory(category),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 30),
+                // Data Management Card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.storage, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Data Management',
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.backup),
+                            label: const Text('Backup Data'),
+                            onPressed: _backupData,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.restore),
+                            label: const Text('Restore Data'),
+                            onPressed: _restoreData,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.file_upload),
+                            label: const Text('Import Sales from CSV'),
+                            onPressed: _importSalesFromCSV,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTextField(String key, String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: TextFormField(
+        controller: _controllers[key],
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: (value) {
+          if (value == null || double.tryParse(value) == null) {
+            return 'Please enter a valid number';
+          }
+          return null;
+        },
+      ),
+    );
+  }
+}
+
+// --- Category Edit Page ---
+class CategoryEditPage extends StatefulWidget {
+  final Category category;
+  const CategoryEditPage({super.key, required this.category});
+
+  @override
+  _CategoryEditPageState createState() => _CategoryEditPageState();
+}
+
+class _CategoryEditPageState extends State<CategoryEditPage> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _nameController;
+  late Map<String, TextEditingController> _controllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.category.name);
+    _controllers = {
+      'filamentCostPerKg': TextEditingController(text: widget.category.filamentCostPerKg.toString()),
+      'laborCost': TextEditingController(text: widget.category.laborCost.toString()),
+      'licenseFee': TextEditingController(text: widget.category.licenseFee.toString()),
+      'shippingCost': TextEditingController(text: widget.category.shippingCost.toString()),
+      'profitMargin': TextEditingController(text: widget.category.profitMargin.toString()),
+    };
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _controllers.values.forEach((controller) => controller.dispose());
+    super.dispose();
+  }
+
+  void _saveCategory() {
+    if (_formKey.currentState!.validate()) {
+      final updatedCategory = Category(
+        id: widget.category.id,
+        name: _nameController.text.trim(),
+        filamentCostPerKg: double.parse(_controllers['filamentCostPerKg']!.text),
+        laborCost: double.parse(_controllers['laborCost']!.text),
+        licenseFee: double.parse(_controllers['licenseFee']!.text),
+        shippingCost: double.parse(_controllers['shippingCost']!.text),
+        profitMargin: double.parse(_controllers['profitMargin']!.text),
+      );
+      
+      context.read<DataBloc>().add(UpdateCategory(updatedCategory));
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Category "${updatedCategory.name}" saved!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  void _deleteCategory() {
+    final productCount = context.read<DataBloc>().state.products.where((p) => p.categoryId == widget.category.id).length;
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Category'),
+        content: Text(
+          productCount > 0
+              ? 'This category has $productCount products. They will be moved to the first remaining category. Continue?'
+              : 'Are you sure you want to delete this category?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<DataBloc>().add(DeleteCategory(widget.category.id));
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Category deleted'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canDelete = context.read<DataBloc>().state.categories.length > 1;
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Edit Category'),
+        actions: [
+          if (canDelete)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _deleteCategory,
+              tooltip: 'Delete Category',
+            ),
+        ],
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -2093,39 +2686,35 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.calculate, color: Theme.of(context).colorScheme.primary),
+                        Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
                         const SizedBox(width: 12),
                         Text(
-                          'Calculation Settings',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          'Category Information',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _buildTextField('filamentCostPerKg', 'Filament Cost (\$/kg)'),
-                    _buildTextField('electricityCostKwh', 'Electricity Cost (\$/kWh)'),
-                    _buildTextField('laborCost', 'Labor & Handling (\$)'),
-                    _buildTextField('licenseFee', 'License Fee (\$)'),
-                    _buildTextField('shippingCost', 'Shipping & Packaging (\$)'),
-                    _buildTextField('etsyFeesPercent', 'Etsy Fees (%)'),
-                    _buildTextField('etsyListingFee', 'Etsy Listing Fee (\$)'),
-                    _buildTextField('profitMargin', 'Desired Profit Margin (%)'),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Category Name',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter a category name';
+                        }
+                        return null;
+                      },
+                    ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 50,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.save),
-                label: const Text('Save Settings', style: TextStyle(fontSize: 16)),
-                onPressed: _saveSettings,
-              ),
-            ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 16),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -2134,57 +2723,39 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.storage, color: Theme.of(context).colorScheme.primary),
+                        Icon(Icons.calculate, color: Theme.of(context).colorScheme.primary),
                         const SizedBox(width: 12),
                         Text(
-                          'Data Management',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          'Calculation Settings',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'These settings are specific to this category',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    ),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.backup),
-                        label: const Text('Backup Data'),
-                        onPressed: _backupData,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.restore),
-                        label: const Text('Restore Data'),
-                        onPressed: _restoreData,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.file_upload),
-                        label: const Text('Import Sales from CSV'),
-                        onPressed: _importSalesFromCSV,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
+                    _buildTextField('filamentCostPerKg', 'Filament Cost (\$/kg)'),
+                    _buildTextField('laborCost', 'Labor & Handling (\$)'),
+                    _buildTextField('licenseFee', 'License Fee (\$)'),
+                    _buildTextField('shippingCost', 'Shipping & Packaging (\$)'),
+                    _buildTextField('profitMargin', 'Desired Profit Margin (%)'),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 50,
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('Save Category', style: TextStyle(fontSize: 16)),
+                onPressed: _saveCategory,
               ),
             ),
           ],
@@ -2232,6 +2803,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   late TextEditingController _mTimeController, _mGramController;
   late TextEditingController _lTimeController, _lGramController;
   
+  late String _selectedCategoryId;
   Map<String, Map<String, double>> _pricingResult = {};
 
   bool get _isEditing => widget.product != null;
@@ -2251,6 +2823,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     _mGramController = TextEditingController(text: widget.product?.mediumVariation.filamentGrams.toString() ?? '0');
     _lTimeController = TextEditingController(text: widget.product?.largeVariation.printTimeHours.toString() ?? '0');
     _lGramController = TextEditingController(text: widget.product?.largeVariation.filamentGrams.toString() ?? '0');
+
+    // Set initial category
+    final categories = context.read<DataBloc>().state.categories;
+    _selectedCategoryId = widget.product?.categoryId ?? (categories.isNotEmpty ? categories.first.id : 'default_3d_models');
 
     // If editing, show existing prices immediately
     if (_isEditing) {
@@ -2274,7 +2850,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   }
   
   void _showExistingPrices() {
-      final settings = context.read<DataBloc>().state.settings;
+      final state = context.read<DataBloc>().state;
+      final settings = state.settings;
+      final category = state.categories.firstWhere((c) => c.id == _selectedCategoryId, orElse: () => state.categories.first);
       final product = widget.product!;
       final variations = {
         'Small': product.smallVariation,
@@ -2286,10 +2864,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       
       variations.forEach((key, variation) {
         if (variation.etsyPrice > 0) {
-            final filamentCostPerGram = settings.filamentCostPerKg / 1000;
+            final filamentCostPerGram = category.filamentCostPerKg / 1000;
             final calculatedFilamentCost = variation.filamentGrams * filamentCostPerGram;
             final calculatedElectricityCost = variation.printTimeHours * settings.electricityCostKwh;
-            final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + settings.laborCost + settings.licenseFee;
+            final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + category.laborCost + category.licenseFee;
 
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
@@ -2311,7 +2889,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
 
   void _calculateAndSave() {
     if (_formKey.currentState!.validate()) {
-      final settings = context.read<DataBloc>().state.settings;
+      final state = context.read<DataBloc>().state;
+      final settings = state.settings;
+      final category = state.categories.firstWhere((c) => c.id == _selectedCategoryId, orElse: () => state.categories.first);
       
       final variationsData = {
         'Small': {'time': double.tryParse(_sTimeController.text) ?? 0, 'grams': double.tryParse(_sGramController.text) ?? 0},
@@ -2329,13 +2909,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         double profitAmount = 0;
         
         if (printTime > 0 && filamentGrams > 0) {
-            final filamentCostPerGram = settings.filamentCostPerKg / 1000;
+            final filamentCostPerGram = category.filamentCostPerKg / 1000;
             final calculatedFilamentCost = filamentGrams * filamentCostPerGram;
             final calculatedElectricityCost = printTime * settings.electricityCostKwh;
             
-            final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + settings.laborCost + settings.licenseFee;
-            profitAmount = totalProductionCost * (settings.profitMargin / 100);
-            final targetAmount = totalProductionCost + profitAmount + settings.shippingCost;
+            final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + category.laborCost + category.licenseFee;
+            profitAmount = totalProductionCost * (category.profitMargin / 100);
+            final targetAmount = totalProductionCost + profitAmount + category.shippingCost;
             final etsyPrice = (targetAmount + settings.etsyListingFee) / (1 - (settings.etsyFeesPercent / 100));
             calculatedPrice = _roundToNearestEven(etsyPrice);
 
@@ -2365,9 +2945,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         smallVariation: newVariations['Small']!,
         mediumVariation: newVariations['Medium']!,
         largeVariation: newVariations['Large']!,
+        categoryId: _selectedCategoryId,
       );
       
       if (_isEditing) {
+        // Preserve sales data when editing
+        product.totalSales = widget.product!.totalSales;
+        product.totalRevenue = widget.product!.totalRevenue;
         context.read<DataBloc>().add(UpdateProduct(product));
       } else {
         context.read<DataBloc>().add(AddProduct(product));
@@ -2418,41 +3002,64 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                 )
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+      body: BlocBuilder<DataBloc, DataState>(
+        builder: (context, state) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Product Information',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Product Information',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 16),
+                          _buildTextField(_nameController, 'Product Name'),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            value: _selectedCategoryId,
+                            decoration: const InputDecoration(
+                              labelText: 'Category',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: state.categories.map((category) {
+                              return DropdownMenuItem<String>(
+                                value: category.id,
+                                child: Text(category.name),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() {
+                                  _selectedCategoryId = value;
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
+                          const SizedBox(height: 12),
+                          _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      _buildTextField(_nameController, 'Product Name'),
-                      const SizedBox(height: 12),
-                      _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
-                      const SizedBox(height: 12),
-                      _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
             const SizedBox(height: 16),
             Card(
               child: Column(
@@ -2513,6 +3120,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
               _buildResultsCard()
           ],
         ),
+      );
+        },
       ),
     );
   }
