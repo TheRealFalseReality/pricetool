@@ -709,6 +709,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String _searchQuery = '';
+  String? _selectedCategoryId; // null means "All Categories"
 
   Future<void> _launchURL(String? urlString) async {
     if (urlString != null && urlString.isNotEmpty) {
@@ -836,6 +837,58 @@ class _HomePageState extends State<HomePage> {
               },
             ),
           ),
+          // Category filter chips
+          BlocBuilder<DataBloc, DataState>(
+            builder: (context, state) {
+              if (state.categories.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              
+              return Container(
+                height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    // "All" chip
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FilterChip(
+                        label: Text('All (${state.products.length})'),
+                        selected: _selectedCategoryId == null,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedCategoryId = null;
+                          });
+                        },
+                        selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        checkmarkColor: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    // Category chips
+                    ...state.categories.map((category) {
+                      final productCount = state.products.where((p) => p.categoryId == category.id).length;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: FilterChip(
+                          label: Text('${category.name} ($productCount)'),
+                          selected: _selectedCategoryId == category.id,
+                          onSelected: (selected) {
+                            setState(() {
+                              _selectedCategoryId = selected ? category.id : null;
+                            });
+                          },
+                          selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                          checkmarkColor: Theme.of(context).colorScheme.primary,
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
           // Products list
           Expanded(
             child: BlocBuilder<DataBloc, DataState>(
@@ -861,9 +914,11 @@ class _HomePageState extends State<HomePage> {
                   );
                 }
                 
-                // Filter products based on search query
+                // Filter products based on search query and selected category
                 final filteredProducts = state.products.where((product) {
-                  return product.name.toLowerCase().contains(_searchQuery);
+                  final matchesSearch = product.name.toLowerCase().contains(_searchQuery);
+                  final matchesCategory = _selectedCategoryId == null || product.categoryId == _selectedCategoryId;
+                  return matchesSearch && matchesCategory;
                 }).toList();
                 
                 if (filteredProducts.isEmpty) {
