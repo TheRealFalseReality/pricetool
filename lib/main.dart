@@ -2836,6 +2836,15 @@ Future<String?> fetchSocialImageFromUrl(String url) async {
     }
   }
   
+  // Try Open Graph secure image (Etsy uses this)
+  metaOgImage = document.querySelector('meta[property="og:image:secure_url"]');
+  if (metaOgImage != null) {
+    final content = metaOgImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
   // Try Twitter Card image as fallback
   var metaTwitterImage = document.querySelector('meta[name="twitter:image"]');
   if (metaTwitterImage != null) {
@@ -2847,6 +2856,15 @@ Future<String?> fetchSocialImageFromUrl(String url) async {
   
   // Try alternative Twitter Card image property
   metaTwitterImage = document.querySelector('meta[property="twitter:image"]');
+  if (metaTwitterImage != null) {
+    final content = metaTwitterImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  // Try Twitter Card secure image
+  metaTwitterImage = document.querySelector('meta[name="twitter:image:src"]');
   if (metaTwitterImage != null) {
     final content = metaTwitterImage.attributes['content'];
     if (content != null && content.isNotEmpty) {
@@ -3276,14 +3294,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                child: _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
+                                child: _buildTextField(_listingUrlController, 'Listing URL (Optional)', isRequired: false),
                               ),
                               const SizedBox(width: 8),
                               Tooltip(
                                 message: 'Auto-load image from listing URL',
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.download, size: 18),
-                                  label: const Text('Auto-load'),
+                                  label: const Text('Load Image'),
                                   onPressed: _autoLoadImageFromUrl,
                                   style: ElevatedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
@@ -3292,8 +3310,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
                         ],
                       ),
                     ),

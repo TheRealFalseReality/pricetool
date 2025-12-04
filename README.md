@@ -32,9 +32,9 @@ A modern Flutter application for calculating optimal pricing for Etsy products w
 - Cloud-friendly data format
 
 ### 🔗 Integration Features
-- Store product images (via URL)
-- Auto-load social images from webpage URLs
-- Link to Etsy listings
+- Auto-load product images from listing URLs (Etsy, etc.)
+- Extract social images from webpages (Open Graph, Twitter Card)
+- Link to product listings
 - Quick access to online stores
 
 ## Getting Started
