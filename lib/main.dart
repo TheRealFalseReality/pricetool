@@ -2793,7 +2793,10 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
 ///
 /// This function attempts to find the social sharing image by checking for:
 /// - Open Graph image (og:image meta tag)
+/// - Open Graph secure image (og:image:secure_url meta tag - used by Etsy)
 /// - Twitter Card image (twitter:image meta tag)
+/// - Twitter Card image property (twitter:image property)
+/// - Twitter Card image source (twitter:image:src meta tag)
 ///
 /// [url] The webpage URL to fetch and parse
 ///
