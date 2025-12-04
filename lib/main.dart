@@ -2792,12 +2792,17 @@ Future<String?> fetchSocialImageFromUrl(String url) async {
   try {
     // Validate and parse URL
     final uri = Uri.tryParse(url);
-    if (uri == null || (!uri.scheme.startsWith('http'))) {
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
       return null;
     }
 
-    // Fetch the webpage
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    // Fetch the webpage with timeout
+    final response = await http.get(uri).timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw Exception('Request timed out');
+      },
+    );
     
     if (response.statusCode != 200) {
       return null;
@@ -2835,7 +2840,8 @@ Future<String?> fetchSocialImageFromUrl(String url) async {
     
     return null;
   } catch (e) {
-    print('Error fetching social image: $e');
+    // Use debugPrint for better Flutter integration
+    debugPrint('Error fetching social image: $e');
     return null;
   }
 }
@@ -2856,8 +2862,19 @@ String _resolveUrl(String imageUrl, Uri baseUri) {
     return '${baseUri.scheme}://${baseUri.host}$imageUrl';
   }
   
-  // Handle relative paths
-  return '${baseUri.scheme}://${baseUri.host}${baseUri.path.substring(0, baseUri.path.lastIndexOf('/') + 1)}$imageUrl';
+  // Handle relative paths - safely handle edge cases
+  final path = baseUri.path;
+  if (path.isEmpty || path == '/') {
+    return '${baseUri.scheme}://${baseUri.host}/$imageUrl';
+  }
+  
+  final lastSlashIndex = path.lastIndexOf('/');
+  if (lastSlashIndex >= 0) {
+    final basePath = path.substring(0, lastSlashIndex + 1);
+    return '${baseUri.scheme}://${baseUri.host}$basePath$imageUrl';
+  }
+  
+  return '${baseUri.scheme}://${baseUri.host}/$imageUrl';
 }
 
 // --- Product Detail/Add/Edit Page ---
@@ -3022,9 +3039,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       }
       
       if (mounted) {
+        // Provide user-friendly error messages
+        String errorMessage = 'Error loading image';
+        if (e.toString().contains('timed out')) {
+          errorMessage = 'Request timed out. Please try again.';
+        } else if (e.toString().contains('SocketException')) {
+          errorMessage = 'Network error. Check your connection.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading image: $e'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );
@@ -3206,15 +3231,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                                 child: _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
                               ),
                               const SizedBox(width: 8),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 0),
-                                child: ElevatedButton.icon(
-                                  icon: const Icon(Icons.download, size: 18),
-                                  label: const Text('Auto-load'),
-                                  onPressed: _autoLoadImageFromUrl,
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
-                                  ),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.download, size: 18),
+                                label: const Text('Auto-load'),
+                                onPressed: _autoLoadImageFromUrl,
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
                                 ),
                               ),
                             ],
