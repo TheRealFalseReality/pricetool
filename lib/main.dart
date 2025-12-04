@@ -4,6 +4,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
@@ -2797,71 +2799,62 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
 ///
 /// Returns the absolute URL of the social image if found, or null if:
 /// - The URL is invalid or not HTTP/HTTPS
-/// - The request fails or times out (10 second timeout)
+/// - The HTTP response status is not 200
 /// - No social image meta tags are found on the page
 ///
-/// Throws exceptions for network errors or timeouts which should be caught by the caller.
+/// Throws [TimeoutException] if the request takes longer than 10 seconds.
+/// Throws [SocketException] for network connectivity issues.
+/// Throws other exceptions for HTTP errors.
 Future<String?> fetchSocialImageFromUrl(String url) async {
-  try {
-    // Validate and parse URL
-    final uri = Uri.tryParse(url);
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return null;
-    }
-
-    // Fetch the webpage with timeout and proper headers
-    final response = await http.get(
-      uri,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; EtsyPricingCalculator/1.0)',
-      },
-    ).timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        throw Exception('Request timed out');
-      },
-    );
-    
-    if (response.statusCode != 200) {
-      return null;
-    }
-
-    // Parse HTML
-    final document = html_parser.parse(response.body);
-    
-    // Try to find Open Graph image (most common for social sharing)
-    var metaOgImage = document.querySelector('meta[property="og:image"]');
-    if (metaOgImage != null) {
-      final content = metaOgImage.attributes['content'];
-      if (content != null && content.isNotEmpty) {
-        return _resolveUrl(content, uri);
-      }
-    }
-    
-    // Try Twitter Card image as fallback
-    var metaTwitterImage = document.querySelector('meta[name="twitter:image"]');
-    if (metaTwitterImage != null) {
-      final content = metaTwitterImage.attributes['content'];
-      if (content != null && content.isNotEmpty) {
-        return _resolveUrl(content, uri);
-      }
-    }
-    
-    // Try alternative Twitter Card image property
-    metaTwitterImage = document.querySelector('meta[property="twitter:image"]');
-    if (metaTwitterImage != null) {
-      final content = metaTwitterImage.attributes['content'];
-      if (content != null && content.isNotEmpty) {
-        return _resolveUrl(content, uri);
-      }
-    }
-    
-    return null;
-  } catch (e) {
-    // Use debugPrint for better Flutter integration
-    debugPrint('Error fetching social image: $e');
+  // Validate and parse URL
+  final uri = Uri.tryParse(url);
+  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
     return null;
   }
+
+  // Fetch the webpage with timeout and proper headers
+  final response = await http.get(
+    uri,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; EtsyPricingCalculator/1.0)',
+    },
+  ).timeout(const Duration(seconds: 10));
+  
+  if (response.statusCode != 200) {
+    return null;
+  }
+
+  // Parse HTML
+  final document = html_parser.parse(response.body);
+  
+  // Try to find Open Graph image (most common for social sharing)
+  var metaOgImage = document.querySelector('meta[property="og:image"]');
+  if (metaOgImage != null) {
+    final content = metaOgImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  // Try Twitter Card image as fallback
+  var metaTwitterImage = document.querySelector('meta[name="twitter:image"]');
+  if (metaTwitterImage != null) {
+    final content = metaTwitterImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  // Try alternative Twitter Card image property
+  metaTwitterImage = document.querySelector('meta[property="twitter:image"]');
+  if (metaTwitterImage != null) {
+    final content = metaTwitterImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  return null;
 }
 
 /// Resolves a potentially relative image URL to an absolute URL.
@@ -3068,6 +3061,34 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           );
         }
       }
+    } on TimeoutException {
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Request timed out. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } on SocketException {
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Network error. Check your connection.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
       // Close loading indicator
       if (mounted) {
@@ -3075,17 +3096,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       }
       
       if (mounted) {
-        // Provide user-friendly error messages
-        String errorMessage = 'Error loading image';
-        if (e.toString().contains('timed out')) {
-          errorMessage = 'Request timed out. Please try again.';
-        } else if (e.toString().contains('SocketException')) {
-          errorMessage = 'Network error. Check your connection.';
-        }
-        
+        debugPrint('Error loading image: $e');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
+          const SnackBar(
+            content: Text('Error loading image. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
