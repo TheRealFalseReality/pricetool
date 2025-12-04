@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html_parser;
 
 // --- Platform Specific Packages for Backup/Restore ---
 import 'package:file_picker/file_picker.dart';
@@ -2785,6 +2787,79 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
   }
 }
 
+// --- Helper function to extract social image from URL ---
+Future<String?> fetchSocialImageFromUrl(String url) async {
+  try {
+    // Validate and parse URL
+    final uri = Uri.tryParse(url);
+    if (uri == null || (!uri.scheme.startsWith('http'))) {
+      return null;
+    }
+
+    // Fetch the webpage
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    
+    if (response.statusCode != 200) {
+      return null;
+    }
+
+    // Parse HTML
+    final document = html_parser.parse(response.body);
+    
+    // Try to find Open Graph image (most common for social sharing)
+    var metaOgImage = document.querySelector('meta[property="og:image"]');
+    if (metaOgImage != null) {
+      final content = metaOgImage.attributes['content'];
+      if (content != null && content.isNotEmpty) {
+        return _resolveUrl(content, uri);
+      }
+    }
+    
+    // Try Twitter Card image as fallback
+    var metaTwitterImage = document.querySelector('meta[name="twitter:image"]');
+    if (metaTwitterImage != null) {
+      final content = metaTwitterImage.attributes['content'];
+      if (content != null && content.isNotEmpty) {
+        return _resolveUrl(content, uri);
+      }
+    }
+    
+    // Try alternative Twitter Card image property
+    metaTwitterImage = document.querySelector('meta[property="twitter:image"]');
+    if (metaTwitterImage != null) {
+      final content = metaTwitterImage.attributes['content'];
+      if (content != null && content.isNotEmpty) {
+        return _resolveUrl(content, uri);
+      }
+    }
+    
+    return null;
+  } catch (e) {
+    print('Error fetching social image: $e');
+    return null;
+  }
+}
+
+// Helper to resolve relative URLs
+String _resolveUrl(String imageUrl, Uri baseUri) {
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    return imageUrl;
+  }
+  
+  // Handle protocol-relative URLs
+  if (imageUrl.startsWith('//')) {
+    return '${baseUri.scheme}:$imageUrl';
+  }
+  
+  // Handle absolute paths
+  if (imageUrl.startsWith('/')) {
+    return '${baseUri.scheme}://${baseUri.host}$imageUrl';
+  }
+  
+  // Handle relative paths
+  return '${baseUri.scheme}://${baseUri.host}${baseUri.path.substring(0, baseUri.path.lastIndexOf('/') + 1)}$imageUrl';
+}
+
 // --- Product Detail/Add/Edit Page ---
 class ProductDetailPage extends StatefulWidget {
   final Product? product;
@@ -2885,6 +2960,76 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           return roundedUp + 1;
       }
       return roundedUp;
+  }
+
+  Future<void> _autoLoadImageFromUrl() async {
+    final listingUrl = _listingUrlController.text.trim();
+    
+    if (listingUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a listing URL first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final imageUrl = await fetchSocialImageFromUrl(listingUrl);
+      
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        setState(() {
+          _imageUrlController.text = imageUrl;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image URL loaded successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not find a social image on that page'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _calculateAndSave() {
@@ -3052,9 +3197,28 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                             },
                           ),
                           const SizedBox(height: 12),
-                          _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
-                          const SizedBox(height: 12),
                           _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
+                              ),
+                              const SizedBox(width: 8),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 0),
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.download, size: 18),
+                                  label: const Text('Auto-load'),
+                                  onPressed: _autoLoadImageFromUrl,
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
