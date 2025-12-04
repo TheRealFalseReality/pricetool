@@ -4,7 +4,11 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html_parser;
 
 // --- Platform Specific Packages for Backup/Restore ---
 import 'package:file_picker/file_picker.dart';
@@ -2785,6 +2789,137 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
   }
 }
 
+/// Fetches and extracts the social media image (Open Graph or Twitter Card) from a webpage URL.
+///
+/// This function attempts to find the social sharing image by checking for:
+/// - Open Graph image (og:image meta tag)
+/// - Open Graph secure image (og:image:secure_url meta tag - used by Etsy)
+/// - Twitter Card image (twitter:image meta tag)
+/// - Twitter Card image property (twitter:image property)
+/// - Twitter Card image source (twitter:image:src meta tag)
+///
+/// [url] The webpage URL to fetch and parse
+///
+/// Returns the absolute URL of the social image if found, or null if:
+/// - The URL is invalid or not HTTP/HTTPS
+/// - The HTTP response status is not 200
+/// - No social image meta tags are found on the page
+///
+/// Throws [TimeoutException] if the request takes longer than 10 seconds.
+/// Throws [SocketException] for network connectivity issues.
+/// Throws other exceptions for HTTP errors.
+Future<String?> fetchSocialImageFromUrl(String url) async {
+  // Validate and parse URL
+  final uri = Uri.tryParse(url);
+  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+    return null;
+  }
+
+  // Fetch the webpage with timeout and proper headers
+  final response = await http.get(
+    uri,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; EtsyPricingCalculator/1.0)',
+    },
+  ).timeout(const Duration(seconds: 10));
+  
+  if (response.statusCode != 200) {
+    return null;
+  }
+
+  // Parse HTML
+  final document = html_parser.parse(response.body);
+  
+  // Try to find Open Graph image (most common for social sharing)
+  var metaOgImage = document.querySelector('meta[property="og:image"]');
+  if (metaOgImage != null) {
+    final content = metaOgImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  // Try Open Graph secure image (Etsy uses this)
+  metaOgImage = document.querySelector('meta[property="og:image:secure_url"]');
+  if (metaOgImage != null) {
+    final content = metaOgImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  // Try Twitter Card image as fallback
+  var metaTwitterImage = document.querySelector('meta[name="twitter:image"]');
+  if (metaTwitterImage != null) {
+    final content = metaTwitterImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  // Try alternative Twitter Card image property
+  metaTwitterImage = document.querySelector('meta[property="twitter:image"]');
+  if (metaTwitterImage != null) {
+    final content = metaTwitterImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  // Try Twitter Card secure image
+  metaTwitterImage = document.querySelector('meta[name="twitter:image:src"]');
+  if (metaTwitterImage != null) {
+    final content = metaTwitterImage.attributes['content'];
+    if (content != null && content.isNotEmpty) {
+      return _resolveUrl(content, uri);
+    }
+  }
+  
+  return null;
+}
+
+/// Resolves a potentially relative image URL to an absolute URL.
+///
+/// This helper function converts various URL formats to absolute URLs:
+/// - Already absolute URLs (http:// or https://) are returned as-is
+/// - Protocol-relative URLs (//example.com/image.jpg) get the base URI's scheme
+/// - Absolute paths (/image.jpg) are combined with the base URI's scheme and host
+/// - Relative paths (image.jpg) are combined with the base URI's full path
+///
+/// [imageUrl] The image URL to resolve (may be relative or absolute)
+/// [baseUri] The base URI of the webpage being parsed
+///
+/// Returns the absolute URL of the image.
+String _resolveUrl(String imageUrl, Uri baseUri) {
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    return imageUrl;
+  }
+  
+  // Handle protocol-relative URLs
+  if (imageUrl.startsWith('//')) {
+    return '${baseUri.scheme}:$imageUrl';
+  }
+  
+  // Handle absolute paths
+  if (imageUrl.startsWith('/')) {
+    return '${baseUri.scheme}://${baseUri.host}$imageUrl';
+  }
+  
+  // Handle relative paths - safely handle edge cases
+  final path = baseUri.path;
+  if (path.isEmpty || path == '/') {
+    return '${baseUri.scheme}://${baseUri.host}/$imageUrl';
+  }
+  
+  final lastSlashIndex = path.lastIndexOf('/');
+  if (lastSlashIndex >= 0) {
+    final basePath = path.substring(0, lastSlashIndex + 1);
+    return '${baseUri.scheme}://${baseUri.host}$basePath$imageUrl';
+  }
+  
+  return '${baseUri.scheme}://${baseUri.host}/$imageUrl';
+}
+
 // --- Product Detail/Add/Edit Page ---
 class ProductDetailPage extends StatefulWidget {
   final Product? product;
@@ -2885,6 +3020,112 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           return roundedUp + 1;
       }
       return roundedUp;
+  }
+
+  Future<void> _autoLoadImageFromUrl() async {
+    final listingUrl = _listingUrlController.text.trim();
+    
+    if (listingUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a listing URL first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Show loading indicator with accessibility support
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading image...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final imageUrl = await fetchSocialImageFromUrl(listingUrl);
+      
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        setState(() {
+          _imageUrlController.text = imageUrl;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image URL loaded successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not find a social image on that page'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } on TimeoutException {
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Request timed out. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } on SocketException {
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Network error. Check your connection.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        debugPrint('Error loading image: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error loading image. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _calculateAndSave() {
@@ -3052,9 +3293,26 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                             },
                           ),
                           const SizedBox(height: 12),
-                          _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
-                          const SizedBox(height: 12),
-                          _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _buildTextField(_listingUrlController, 'Listing URL (Optional)', isRequired: false),
+                              ),
+                              const SizedBox(width: 8),
+                              Tooltip(
+                                message: 'Auto-load image from listing URL',
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.download, size: 18),
+                                  label: const Text('Load Image'),
+                                  onPressed: _autoLoadImageFromUrl,
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
