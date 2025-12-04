@@ -2787,7 +2787,20 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
   }
 }
 
-// --- Helper function to extract social image from URL ---
+/// Fetches and extracts the social media image (Open Graph or Twitter Card) from a webpage URL.
+///
+/// This function attempts to find the social sharing image by checking for:
+/// - Open Graph image (og:image meta tag)
+/// - Twitter Card image (twitter:image meta tag)
+///
+/// [url] The webpage URL to fetch and parse
+///
+/// Returns the absolute URL of the social image if found, or null if:
+/// - The URL is invalid or not HTTP/HTTPS
+/// - The request fails or times out (10 second timeout)
+/// - No social image meta tags are found on the page
+///
+/// Throws exceptions for network errors or timeouts which should be caught by the caller.
 Future<String?> fetchSocialImageFromUrl(String url) async {
   try {
     // Validate and parse URL
@@ -2851,7 +2864,18 @@ Future<String?> fetchSocialImageFromUrl(String url) async {
   }
 }
 
-// Helper to resolve relative URLs
+/// Resolves a potentially relative image URL to an absolute URL.
+///
+/// This helper function converts various URL formats to absolute URLs:
+/// - Already absolute URLs (http:// or https://) are returned as-is
+/// - Protocol-relative URLs (//example.com/image.jpg) get the base URI's scheme
+/// - Absolute paths (/image.jpg) are combined with the base URI's scheme and host
+/// - Relative paths (image.jpg) are combined with the base URI's full path
+///
+/// [imageUrl] The image URL to resolve (may be relative or absolute)
+/// [baseUri] The base URI of the webpage being parsed
+///
+/// Returns the absolute URL of the image.
 String _resolveUrl(String imageUrl, Uri baseUri) {
   if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
     return imageUrl;
@@ -3242,7 +3266,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                               ),
                               const SizedBox(width: 8),
                               Tooltip(
-                                message: 'Auto-load image from Etsy listing URL',
+                                message: 'Auto-load image from listing URL',
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.download, size: 18),
                                   label: const Text('Auto-load'),
