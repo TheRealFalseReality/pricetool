@@ -2796,8 +2796,13 @@ Future<String?> fetchSocialImageFromUrl(String url) async {
       return null;
     }
 
-    // Fetch the webpage with timeout
-    final response = await http.get(uri).timeout(
+    // Fetch the webpage with timeout and proper headers
+    final response = await http.get(
+      uri,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; EtsyPricingCalculator/1.0)',
+      },
+    ).timeout(
       const Duration(seconds: 10),
       onTimeout: () {
         throw Exception('Request timed out');
@@ -2992,12 +2997,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       return;
     }
 
-    // Show loading indicator
+    // Show loading indicator with accessibility support
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading image...'),
+          ],
+        ),
       ),
     );
 
@@ -3222,8 +3234,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                             },
                           ),
                           const SizedBox(height: 12),
-                          _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
-                          const SizedBox(height: 12),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -3231,16 +3241,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                                 child: _buildTextField(_imageUrlController, 'Image URL (Optional)', isRequired: false),
                               ),
                               const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.download, size: 18),
-                                label: const Text('Auto-load'),
-                                onPressed: _autoLoadImageFromUrl,
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+                              Tooltip(
+                                message: 'Auto-load image from Etsy listing URL',
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.download, size: 18),
+                                  label: const Text('Auto-load'),
+                                  onPressed: _autoLoadImageFromUrl,
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
+                          const SizedBox(height: 12),
+                          _buildTextField(_listingUrlController, 'Etsy Listing URL (Optional)', isRequired: false),
                         ],
                       ),
                     ),
