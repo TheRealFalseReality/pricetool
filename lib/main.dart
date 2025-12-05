@@ -199,29 +199,11 @@ class Settings extends HiveObject {
   late double etsyFeesPercent;
   @HiveField(2)
   late double etsyListingFee;
-  @HiveField(3)
-  late double avoidanceZoneMin;
-  @HiveField(4)
-  late double avoidanceZoneMax;
-  @HiveField(5)
-  late double avoidanceZoneThreshold;
-  @HiveField(6)
-  late double smallPriceCap;
-  @HiveField(7)
-  late double minGapSmallMedium;
-  @HiveField(8)
-  late double minGapMediumLarge;
 
   Settings.defaults() {
     electricityCostKwh = 0.15;
     etsyFeesPercent = 9.5;
     etsyListingFee = 0.20;
-    avoidanceZoneMin = 0;
-    avoidanceZoneMax = 0;
-    avoidanceZoneThreshold = 0;
-    smallPriceCap = 0;
-    minGapSmallMedium = 0;
-    minGapMediumLarge = 0;
   }
   
   // For JSON serialization
@@ -229,25 +211,13 @@ class Settings extends HiveObject {
     'electricityCostKwh': electricityCostKwh,
     'etsyFeesPercent': etsyFeesPercent,
     'etsyListingFee': etsyListingFee,
-    'avoidanceZoneMin': avoidanceZoneMin,
-    'avoidanceZoneMax': avoidanceZoneMax,
-    'avoidanceZoneThreshold': avoidanceZoneThreshold,
-    'smallPriceCap': smallPriceCap,
-    'minGapSmallMedium': minGapSmallMedium,
-    'minGapMediumLarge': minGapMediumLarge,
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) {
     return Settings.defaults()
       ..electricityCostKwh = (json['electricityCostKwh'] as num).toDouble()
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num).toDouble()
-      ..etsyListingFee = (json['etsyListingFee'] as num).toDouble()
-      ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
-      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
-      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble()
-      ..smallPriceCap = (json['smallPriceCap'] as num? ?? 0).toDouble()
-      ..minGapSmallMedium = (json['minGapSmallMedium'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble()
-      ..minGapMediumLarge = (json['minGapMediumLarge'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble();
+      ..etsyListingFee = (json['etsyListingFee'] as num).toDouble();
   }
   
   // Helper method to create from old settings for backward compatibility
@@ -255,13 +225,7 @@ class Settings extends HiveObject {
     return Settings.defaults()
       ..electricityCostKwh = (json['electricityCostKwh'] as num? ?? 0.15).toDouble()
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num? ?? 9.5).toDouble()
-      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble()
-      ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
-      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
-      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble()
-      ..smallPriceCap = (json['smallPriceCap'] as num? ?? 0).toDouble()
-      ..minGapSmallMedium = (json['minGapSmallMedium'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble()
-      ..minGapMediumLarge = (json['minGapMediumLarge'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble();
+      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble();
   }
 }
 
@@ -421,41 +385,22 @@ class SettingsAdapter extends TypeAdapter<Settings> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    final oldGap = fields.containsKey(7) ? fields[7] as double : 0;
     return Settings.defaults()
       ..electricityCostKwh = fields[0] as double
       ..etsyFeesPercent = fields[1] as double
-      ..etsyListingFee = fields[2] as double
-      ..avoidanceZoneMin = fields.containsKey(3) ? fields[3] as double : 0
-      ..avoidanceZoneMax = fields.containsKey(4) ? fields[4] as double : 0
-      ..avoidanceZoneThreshold = fields.containsKey(5) ? fields[5] as double : 0
-      ..smallPriceCap = fields.containsKey(6) ? fields[6] as double : 0
-      ..minGapSmallMedium = fields.containsKey(7) ? (fields.containsKey(8) ? fields[7] as double : oldGap) : 0
-      ..minGapMediumLarge = fields.containsKey(8) ? fields[8] as double : oldGap;
+      ..etsyListingFee = fields[2] as double;
   }
 
   @override
   void write(BinaryWriter writer, Settings obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(3)
       ..writeByte(0)
       ..write(obj.electricityCostKwh)
       ..writeByte(1)
       ..write(obj.etsyFeesPercent)
       ..writeByte(2)
-      ..write(obj.etsyListingFee)
-      ..writeByte(3)
-      ..write(obj.avoidanceZoneMin)
-      ..writeByte(4)
-      ..write(obj.avoidanceZoneMax)
-      ..writeByte(5)
-      ..write(obj.avoidanceZoneThreshold)
-      ..writeByte(6)
-      ..write(obj.smallPriceCap)
-      ..writeByte(7)
-      ..write(obj.minGapSmallMedium)
-      ..writeByte(8)
-      ..write(obj.minGapMediumLarge);
+      ..write(obj.etsyListingFee);
   }
 }
 
@@ -2190,12 +2135,6 @@ class _SettingsPageState extends State<SettingsPage> {
       'electricityCostKwh': TextEditingController(text: settings.electricityCostKwh.toString()),
       'etsyFeesPercent': TextEditingController(text: settings.etsyFeesPercent.toString()),
       'etsyListingFee': TextEditingController(text: settings.etsyListingFee.toString()),
-      'avoidanceZoneMin': TextEditingController(text: settings.avoidanceZoneMin.toString()),
-      'avoidanceZoneMax': TextEditingController(text: settings.avoidanceZoneMax.toString()),
-      'avoidanceZoneThreshold': TextEditingController(text: settings.avoidanceZoneThreshold.toString()),
-      'smallPriceCap': TextEditingController(text: settings.smallPriceCap.toString()),
-      'minGapSmallMedium': TextEditingController(text: settings.minGapSmallMedium.toString()),
-      'minGapMediumLarge': TextEditingController(text: settings.minGapMediumLarge.toString()),
     };
   }
   
@@ -2503,59 +2442,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         _buildTextField('electricityCostKwh', 'Electricity Cost (\$/kWh)'),
                         _buildTextField('etsyFeesPercent', 'Etsy Fees (%)'),
                         _buildTextField('etsyListingFee', 'Etsy Listing Fee (\$)'),
-                        const SizedBox(height: 16),
-                        const Divider(),
                         const SizedBox(height: 8),
                         Text(
-                          'Price Avoidance Zone',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Prices within this zone will be rounded to min or max based on threshold. Set all to 0 to disable.',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextField('avoidanceZoneMin', 'Minimum Price (\$)'),
-                        _buildTextField('avoidanceZoneMax', 'Maximum Price (\$)'),
-                        _buildTextField('avoidanceZoneThreshold', 'Threshold from Min (\$)'),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Example: Min=34, Max=42, Threshold=4 means prices 34.01-38.00 round to 34, prices 38.01-41.99 round to 42',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
-                        ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Price Cap & Gap Settings',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Additional pricing adjustments applied after avoidance zone (avoidance zone takes priority)',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextField('smallPriceCap', 'Small Size Price Cap (\$)'),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Keep small model prices at or below this value (e.g., 20). Set to 0 to disable.',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextField('minGapSmallMedium', 'Min Gap: Small ↔ Medium (\$)'),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Minimum gap between Small and Medium prices (e.g., 8-10). Set to 0 to disable.',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextField('minGapMediumLarge', 'Min Gap: Medium ↔ Large (\$)'),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Minimum gap between Medium and Large prices (e.g., 8-10). Set to 0 to disable.',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                          'Note: Price avoidance zone, price cap, and gap settings are now configured per category.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[500], fontStyle: FontStyle.italic),
                         ),
                       ],
                     ),
