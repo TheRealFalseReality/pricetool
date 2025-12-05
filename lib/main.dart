@@ -30,6 +30,18 @@ class Category extends HiveObject {
   late double shippingCost;
   @HiveField(6)
   late double profitMargin;
+  @HiveField(7)
+  late double avoidanceZoneMin;
+  @HiveField(8)
+  late double avoidanceZoneMax;
+  @HiveField(9)
+  late double avoidanceZoneThreshold;
+  @HiveField(10)
+  late double smallPriceCap;
+  @HiveField(11)
+  late double minGapSmallMedium;
+  @HiveField(12)
+  late double minGapMediumLarge;
 
   Category({
     required this.id,
@@ -39,6 +51,12 @@ class Category extends HiveObject {
     this.licenseFee = 2.00,
     this.shippingCost = 2.00,
     this.profitMargin = 40.0,
+    this.avoidanceZoneMin = 0,
+    this.avoidanceZoneMax = 0,
+    this.avoidanceZoneThreshold = 0,
+    this.smallPriceCap = 0,
+    this.minGapSmallMedium = 0,
+    this.minGapMediumLarge = 0,
   });
 
   // For JSON serialization
@@ -50,6 +68,12 @@ class Category extends HiveObject {
     'licenseFee': licenseFee,
     'shippingCost': shippingCost,
     'profitMargin': profitMargin,
+    'avoidanceZoneMin': avoidanceZoneMin,
+    'avoidanceZoneMax': avoidanceZoneMax,
+    'avoidanceZoneThreshold': avoidanceZoneThreshold,
+    'smallPriceCap': smallPriceCap,
+    'minGapSmallMedium': minGapSmallMedium,
+    'minGapMediumLarge': minGapMediumLarge,
   };
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
@@ -60,6 +84,12 @@ class Category extends HiveObject {
     licenseFee: (json['licenseFee'] as num).toDouble(),
     shippingCost: (json['shippingCost'] as num).toDouble(),
     profitMargin: (json['profitMargin'] as num).toDouble(),
+    avoidanceZoneMin: (json['avoidanceZoneMin'] as num? ?? 0).toDouble(),
+    avoidanceZoneMax: (json['avoidanceZoneMax'] as num? ?? 0).toDouble(),
+    avoidanceZoneThreshold: (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble(),
+    smallPriceCap: (json['smallPriceCap'] as num? ?? 0).toDouble(),
+    minGapSmallMedium: (json['minGapSmallMedium'] as num? ?? 0).toDouble(),
+    minGapMediumLarge: (json['minGapMediumLarge'] as num? ?? 0).toDouble(),
   );
 }
 
@@ -255,13 +285,19 @@ class CategoryAdapter extends TypeAdapter<Category> {
       licenseFee: fields[4] as double,
       shippingCost: fields[5] as double,
       profitMargin: fields[6] as double,
+      avoidanceZoneMin: fields.containsKey(7) ? fields[7] as double : 0,
+      avoidanceZoneMax: fields.containsKey(8) ? fields[8] as double : 0,
+      avoidanceZoneThreshold: fields.containsKey(9) ? fields[9] as double : 0,
+      smallPriceCap: fields.containsKey(10) ? fields[10] as double : 0,
+      minGapSmallMedium: fields.containsKey(11) ? fields[11] as double : 0,
+      minGapMediumLarge: fields.containsKey(12) ? fields[12] as double : 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Category obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -275,7 +311,19 @@ class CategoryAdapter extends TypeAdapter<Category> {
       ..writeByte(5)
       ..write(obj.shippingCost)
       ..writeByte(6)
-      ..write(obj.profitMargin);
+      ..write(obj.profitMargin)
+      ..writeByte(7)
+      ..write(obj.avoidanceZoneMin)
+      ..writeByte(8)
+      ..write(obj.avoidanceZoneMax)
+      ..writeByte(9)
+      ..write(obj.avoidanceZoneThreshold)
+      ..writeByte(10)
+      ..write(obj.smallPriceCap)
+      ..writeByte(11)
+      ..write(obj.minGapSmallMedium)
+      ..writeByte(12)
+      ..write(obj.minGapMediumLarge);
   }
 }
 
@@ -2702,6 +2750,12 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       'licenseFee': TextEditingController(text: widget.category.licenseFee.toString()),
       'shippingCost': TextEditingController(text: widget.category.shippingCost.toString()),
       'profitMargin': TextEditingController(text: widget.category.profitMargin.toString()),
+      'avoidanceZoneMin': TextEditingController(text: widget.category.avoidanceZoneMin.toString()),
+      'avoidanceZoneMax': TextEditingController(text: widget.category.avoidanceZoneMax.toString()),
+      'avoidanceZoneThreshold': TextEditingController(text: widget.category.avoidanceZoneThreshold.toString()),
+      'smallPriceCap': TextEditingController(text: widget.category.smallPriceCap.toString()),
+      'minGapSmallMedium': TextEditingController(text: widget.category.minGapSmallMedium.toString()),
+      'minGapMediumLarge': TextEditingController(text: widget.category.minGapMediumLarge.toString()),
     };
   }
 
@@ -2722,6 +2776,12 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         licenseFee: double.parse(_controllers['licenseFee']!.text),
         shippingCost: double.parse(_controllers['shippingCost']!.text),
         profitMargin: double.parse(_controllers['profitMargin']!.text),
+        avoidanceZoneMin: double.parse(_controllers['avoidanceZoneMin']!.text),
+        avoidanceZoneMax: double.parse(_controllers['avoidanceZoneMax']!.text),
+        avoidanceZoneThreshold: double.parse(_controllers['avoidanceZoneThreshold']!.text),
+        smallPriceCap: double.parse(_controllers['smallPriceCap']!.text),
+        minGapSmallMedium: double.parse(_controllers['minGapSmallMedium']!.text),
+        minGapMediumLarge: double.parse(_controllers['minGapMediumLarge']!.text),
       );
       
       context.read<DataBloc>().add(UpdateCategory(updatedCategory));
@@ -2859,6 +2919,70 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                     _buildTextField('licenseFee', 'License Fee (\$)'),
                     _buildTextField('shippingCost', 'Shipping & Packaging (\$)'),
                     _buildTextField('profitMargin', 'Desired Profit Margin (%)'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.price_check, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Price Avoidance Zone',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Round prices in this range to min or max. Set all to 0 to disable.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField('avoidanceZoneMin', 'Minimum Price (\$)'),
+                    _buildTextField('avoidanceZoneMax', 'Maximum Price (\$)'),
+                    _buildTextField('avoidanceZoneThreshold', 'Threshold from Min (\$)'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.space_bar, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Price Cap & Gap Settings',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Control pricing limits and spacing between sizes. Set to 0 to disable.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField('smallPriceCap', 'Small Size Price Cap (\$)'),
+                    _buildTextField('minGapSmallMedium', 'Min Gap: Small ↔ Medium (\$)'),
+                    _buildTextField('minGapMediumLarge', 'Min Gap: Medium ↔ Large (\$)'),
                   ],
                 ),
               ),
@@ -3072,7 +3196,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             double roundedPrice = _roundToNearestEven(etsyPrice);
             
             // Then apply avoidance zone with threshold (priority)
-            calculatedPrice = _applyAvoidanceZone(roundedPrice, settings.avoidanceZoneMin, settings.avoidanceZoneMax, settings.avoidanceZoneThreshold);
+            calculatedPrice = _applyAvoidanceZone(roundedPrice, category.avoidanceZoneMin, category.avoidanceZoneMax, category.avoidanceZoneThreshold);
 
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
@@ -3090,26 +3214,26 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       });
 
       // Second pass: apply small price cap and calculate suggested gap adjustments
-      if (newResults.containsKey('Small') && settings.smallPriceCap > 0) {
+      if (newResults.containsKey('Small') && category.smallPriceCap > 0) {
         final smallPrice = newResults['Small']!['etsyPrice']!;
-        if (smallPrice > settings.smallPriceCap) {
+        if (smallPrice > category.smallPriceCap) {
           newResults['Small']!['originalPrice'] = smallPrice; // Store original before cap
-          newResults['Small']!['etsyPrice'] = settings.smallPriceCap;
-          newVariations['Small']!.etsyPrice = settings.smallPriceCap;
+          newResults['Small']!['etsyPrice'] = category.smallPriceCap;
+          newVariations['Small']!.etsyPrice = category.smallPriceCap;
         }
       }
 
       // Apply cascading gap adjustments
-      if (settings.minGapSmallMedium > 0 || settings.minGapMediumLarge > 0) {
+      if (category.minGapSmallMedium > 0 || category.minGapMediumLarge > 0) {
         final smallPrice = newResults['Small']?['etsyPrice'] ?? 0;
         double mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
         double largePrice = newResults['Large']?['etsyPrice'] ?? 0;
 
         // Check Small-Medium gap
-        if (smallPrice > 0 && mediumPrice > 0 && settings.minGapSmallMedium > 0) {
+        if (smallPrice > 0 && mediumPrice > 0 && category.minGapSmallMedium > 0) {
           final gapSM = mediumPrice - smallPrice;
-          if (gapSM < settings.minGapSmallMedium) {
-            final adjustedMedium = smallPrice + settings.minGapSmallMedium;
+          if (gapSM < category.minGapSmallMedium) {
+            final adjustedMedium = smallPrice + category.minGapSmallMedium;
             newResults['Medium']!['originalPrice'] = mediumPrice; // Store original
             newResults['Medium']!['etsyPrice'] = adjustedMedium;
             newVariations['Medium']!.etsyPrice = adjustedMedium;
@@ -3120,10 +3244,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         }
 
         // Check Medium-Large gap (with cascading from Medium adjustment)
-        if (mediumPrice > 0 && largePrice > 0 && settings.minGapMediumLarge > 0) {
+        if (mediumPrice > 0 && largePrice > 0 && category.minGapMediumLarge > 0) {
           final gapML = largePrice - mediumPrice;
-          if (gapML < settings.minGapMediumLarge) {
-            final adjustedLarge = mediumPrice + settings.minGapMediumLarge;
+          if (gapML < category.minGapMediumLarge) {
+            final adjustedLarge = mediumPrice + category.minGapMediumLarge;
             newResults['Large']!['originalPrice'] = largePrice; // Store original
             newResults['Large']!['etsyPrice'] = adjustedLarge;
             newVariations['Large']!.etsyPrice = adjustedLarge;
