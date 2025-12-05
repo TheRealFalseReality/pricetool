@@ -173,6 +173,8 @@ class Settings extends HiveObject {
   late double avoidanceZoneMin;
   @HiveField(4)
   late double avoidanceZoneMax;
+  @HiveField(5)
+  late double avoidanceZoneThreshold;
 
   Settings.defaults() {
     electricityCostKwh = 0.15;
@@ -180,6 +182,7 @@ class Settings extends HiveObject {
     etsyListingFee = 0.20;
     avoidanceZoneMin = 0;
     avoidanceZoneMax = 0;
+    avoidanceZoneThreshold = 0;
   }
   
   // For JSON serialization
@@ -189,6 +192,7 @@ class Settings extends HiveObject {
     'etsyListingFee': etsyListingFee,
     'avoidanceZoneMin': avoidanceZoneMin,
     'avoidanceZoneMax': avoidanceZoneMax,
+    'avoidanceZoneThreshold': avoidanceZoneThreshold,
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -197,7 +201,8 @@ class Settings extends HiveObject {
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num).toDouble()
       ..etsyListingFee = (json['etsyListingFee'] as num).toDouble()
       ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
-      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble();
+      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
+      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble();
   }
   
   // Helper method to create from old settings for backward compatibility
@@ -207,7 +212,8 @@ class Settings extends HiveObject {
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num? ?? 9.5).toDouble()
       ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble()
       ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
-      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble();
+      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
+      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble();
   }
 }
 
@@ -354,13 +360,14 @@ class SettingsAdapter extends TypeAdapter<Settings> {
       ..etsyFeesPercent = fields[1] as double
       ..etsyListingFee = fields[2] as double
       ..avoidanceZoneMin = fields.containsKey(3) ? fields[3] as double : 0
-      ..avoidanceZoneMax = fields.containsKey(4) ? fields[4] as double : 0;
+      ..avoidanceZoneMax = fields.containsKey(4) ? fields[4] as double : 0
+      ..avoidanceZoneThreshold = fields.containsKey(5) ? fields[5] as double : 0;
   }
 
   @override
   void write(BinaryWriter writer, Settings obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.electricityCostKwh)
       ..writeByte(1)
@@ -370,7 +377,9 @@ class SettingsAdapter extends TypeAdapter<Settings> {
       ..writeByte(3)
       ..write(obj.avoidanceZoneMin)
       ..writeByte(4)
-      ..write(obj.avoidanceZoneMax);
+      ..write(obj.avoidanceZoneMax)
+      ..writeByte(5)
+      ..write(obj.avoidanceZoneThreshold);
   }
 }
 
@@ -2107,6 +2116,7 @@ class _SettingsPageState extends State<SettingsPage> {
       'etsyListingFee': TextEditingController(text: settings.etsyListingFee.toString()),
       'avoidanceZoneMin': TextEditingController(text: settings.avoidanceZoneMin.toString()),
       'avoidanceZoneMax': TextEditingController(text: settings.avoidanceZoneMax.toString()),
+      'avoidanceZoneThreshold': TextEditingController(text: settings.avoidanceZoneThreshold.toString()),
     };
   }
   
@@ -2423,12 +2433,18 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Prices between these values will be rounded to the nearest extreme. Set both to 0 to disable.',
+                          'Prices within this zone will be rounded to min or max based on threshold. Set all to 0 to disable.',
                           style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                         ),
                         const SizedBox(height: 12),
                         _buildTextField('avoidanceZoneMin', 'Minimum Price (\$)'),
                         _buildTextField('avoidanceZoneMax', 'Maximum Price (\$)'),
+                        _buildTextField('avoidanceZoneThreshold', 'Threshold from Min (\$)'),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Example: Min=34, Max=42, Threshold=4 means prices 34-38 round to 34, above 38 round to 42',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                        ),
                       ],
                     ),
                   ),
@@ -2922,23 +2938,33 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       return roundedUp;
   }
 
-  double _applyAvoidanceZone(double price, double minZone, double maxZone) {
-    // If avoidance zone is disabled (both are 0 or invalid), return original price
+  double _applyAvoidanceZone(double price, double minZone, double maxZone, double threshold) {
+    // If avoidance zone is disabled (all are 0 or invalid), return original price
     if (minZone <= 0 || maxZone <= 0 || minZone >= maxZone) {
       return price;
     }
     
     // If price is within the avoidance zone (strictly greater than min and strictly less than max)
     if (price > minZone && price < maxZone) {
-      // Calculate distance to both extremes
-      final distanceToMin = price - minZone;
-      final distanceToMax = maxZone - price;
-      
-      // Round to the nearest extreme
-      if (distanceToMin < distanceToMax) {
-        return minZone;
+      // If threshold is set and valid, use threshold-based rounding
+      if (threshold > 0 && threshold < (maxZone - minZone)) {
+        // If price is within threshold distance from min, round down to min
+        if (price <= minZone + threshold) {
+          return minZone;
+        } else {
+          // Otherwise round up to max
+          return maxZone;
+        }
       } else {
-        return maxZone;
+        // Fallback to nearest extreme if threshold is not configured properly
+        final distanceToMin = price - minZone;
+        final distanceToMax = maxZone - price;
+        
+        if (distanceToMin < distanceToMax) {
+          return minZone;
+        } else {
+          return maxZone;
+        }
       }
     }
     
@@ -2980,8 +3006,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             // Apply even rounding first
             double roundedPrice = _roundToNearestEven(etsyPrice);
             
-            // Then apply avoidance zone
-            calculatedPrice = _applyAvoidanceZone(roundedPrice, settings.avoidanceZoneMin, settings.avoidanceZoneMax);
+            // Then apply avoidance zone with threshold
+            calculatedPrice = _applyAvoidanceZone(roundedPrice, settings.avoidanceZoneMin, settings.avoidanceZoneMax, settings.avoidanceZoneThreshold);
 
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
