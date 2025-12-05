@@ -318,7 +318,7 @@ class ProductVariationAdapter extends TypeAdapter<ProductVariation> {
   @override
   void write(BinaryWriter writer, ProductVariation obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(5) // Total number of fields being serialized
       ..writeByte(0)
       ..write(obj.printTimeHours)
       ..writeByte(1)
@@ -3148,7 +3148,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           if (gapSM < category.minGapSmallMedium) {
             final adjustedMedium = smallPrice + category.minGapSmallMedium;
             // Only apply if adjustment increases price above original unadjusted price
-            if (adjustedMedium > mediumOriginalPrice) {
+            // Check mediumOriginalPrice > 0 to handle legacy data
+            if (mediumOriginalPrice > 0 && adjustedMedium > mediumOriginalPrice) {
               newResults['Medium']!['originalPrice'] = mediumOriginalPrice; // Store original for display
               newResults['Medium']!['etsyPrice'] = adjustedMedium;
               newVariations['Medium']!.etsyPrice = adjustedMedium;
@@ -3166,7 +3167,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           if (gapML < category.minGapMediumLarge) {
             final adjustedLarge = mediumPrice + category.minGapMediumLarge;
             // Only apply if adjustment increases price above original unadjusted price
-            if (adjustedLarge > largeOriginalPrice) {
+            // Check largeOriginalPrice > 0 to handle legacy data
+            if (largeOriginalPrice > 0 && adjustedLarge > largeOriginalPrice) {
               newResults['Large']!['originalPrice'] = largeOriginalPrice; // Store original for display
               newResults['Large']!['etsyPrice'] = adjustedLarge;
               newVariations['Large']!.etsyPrice = adjustedLarge;
