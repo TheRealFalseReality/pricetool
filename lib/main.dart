@@ -178,7 +178,9 @@ class Settings extends HiveObject {
   @HiveField(6)
   late double smallPriceCap;
   @HiveField(7)
-  late double minPriceGap;
+  late double minGapSmallMedium;
+  @HiveField(8)
+  late double minGapMediumLarge;
 
   Settings.defaults() {
     electricityCostKwh = 0.15;
@@ -188,7 +190,8 @@ class Settings extends HiveObject {
     avoidanceZoneMax = 0;
     avoidanceZoneThreshold = 0;
     smallPriceCap = 0;
-    minPriceGap = 0;
+    minGapSmallMedium = 0;
+    minGapMediumLarge = 0;
   }
   
   // For JSON serialization
@@ -200,7 +203,8 @@ class Settings extends HiveObject {
     'avoidanceZoneMax': avoidanceZoneMax,
     'avoidanceZoneThreshold': avoidanceZoneThreshold,
     'smallPriceCap': smallPriceCap,
-    'minPriceGap': minPriceGap,
+    'minGapSmallMedium': minGapSmallMedium,
+    'minGapMediumLarge': minGapMediumLarge,
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -212,7 +216,8 @@ class Settings extends HiveObject {
       ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
       ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble()
       ..smallPriceCap = (json['smallPriceCap'] as num? ?? 0).toDouble()
-      ..minPriceGap = (json['minPriceGap'] as num? ?? 0).toDouble();
+      ..minGapSmallMedium = (json['minGapSmallMedium'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble()
+      ..minGapMediumLarge = (json['minGapMediumLarge'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble();
   }
   
   // Helper method to create from old settings for backward compatibility
@@ -225,7 +230,8 @@ class Settings extends HiveObject {
       ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
       ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble()
       ..smallPriceCap = (json['smallPriceCap'] as num? ?? 0).toDouble()
-      ..minPriceGap = (json['minPriceGap'] as num? ?? 0).toDouble();
+      ..minGapSmallMedium = (json['minGapSmallMedium'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble()
+      ..minGapMediumLarge = (json['minGapMediumLarge'] as num? ?? json['minPriceGap'] as num? ?? 0).toDouble();
   }
 }
 
@@ -367,6 +373,7 @@ class SettingsAdapter extends TypeAdapter<Settings> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+    final oldGap = fields.containsKey(7) ? fields[7] as double : 0;
     return Settings.defaults()
       ..electricityCostKwh = fields[0] as double
       ..etsyFeesPercent = fields[1] as double
@@ -375,13 +382,14 @@ class SettingsAdapter extends TypeAdapter<Settings> {
       ..avoidanceZoneMax = fields.containsKey(4) ? fields[4] as double : 0
       ..avoidanceZoneThreshold = fields.containsKey(5) ? fields[5] as double : 0
       ..smallPriceCap = fields.containsKey(6) ? fields[6] as double : 0
-      ..minPriceGap = fields.containsKey(7) ? fields[7] as double : 0;
+      ..minGapSmallMedium = fields.containsKey(7) ? (fields.containsKey(8) ? fields[7] as double : oldGap) : 0
+      ..minGapMediumLarge = fields.containsKey(8) ? fields[8] as double : oldGap;
   }
 
   @override
   void write(BinaryWriter writer, Settings obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.electricityCostKwh)
       ..writeByte(1)
@@ -397,7 +405,9 @@ class SettingsAdapter extends TypeAdapter<Settings> {
       ..writeByte(6)
       ..write(obj.smallPriceCap)
       ..writeByte(7)
-      ..write(obj.minPriceGap);
+      ..write(obj.minGapSmallMedium)
+      ..writeByte(8)
+      ..write(obj.minGapMediumLarge);
   }
 }
 
@@ -2136,7 +2146,8 @@ class _SettingsPageState extends State<SettingsPage> {
       'avoidanceZoneMax': TextEditingController(text: settings.avoidanceZoneMax.toString()),
       'avoidanceZoneThreshold': TextEditingController(text: settings.avoidanceZoneThreshold.toString()),
       'smallPriceCap': TextEditingController(text: settings.smallPriceCap.toString()),
-      'minPriceGap': TextEditingController(text: settings.minPriceGap.toString()),
+      'minGapSmallMedium': TextEditingController(text: settings.minGapSmallMedium.toString()),
+      'minGapMediumLarge': TextEditingController(text: settings.minGapMediumLarge.toString()),
     };
   }
   
@@ -2485,10 +2496,17 @@ class _SettingsPageState extends State<SettingsPage> {
                           style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
                         ),
                         const SizedBox(height: 12),
-                        _buildTextField('minPriceGap', 'Minimum Price Gap (\$)'),
+                        _buildTextField('minGapSmallMedium', 'Min Gap: Small ↔ Medium (\$)'),
                         const SizedBox(height: 4),
                         Text(
-                          'Try to maintain at least this gap between sizes (e.g., 8-10). Set to 0 to disable.',
+                          'Minimum gap between Small and Medium prices (e.g., 8-10). Set to 0 to disable.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildTextField('minGapMediumLarge', 'Min Gap: Medium ↔ Large (\$)'),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Minimum gap between Medium and Large prices (e.g., 8-10). Set to 0 to disable.',
                           style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
                         ),
                       ],
@@ -3081,23 +3099,29 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         }
       }
 
-      // Calculate suggested prices with gap adjustments (for reference only)
-      if (settings.minPriceGap > 0) {
+      // Calculate suggested prices with cascading gap adjustments (for reference only)
+      if (settings.minGapSmallMedium > 0 || settings.minGapMediumLarge > 0) {
         final smallPrice = newResults['Small']?['etsyPrice'] ?? 0;
-        final mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
-        final largePrice = newResults['Large']?['etsyPrice'] ?? 0;
+        double mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
+        double largePrice = newResults['Large']?['etsyPrice'] ?? 0;
 
-        if (smallPrice > 0 && mediumPrice > 0) {
+        // Check Small-Medium gap
+        if (smallPrice > 0 && mediumPrice > 0 && settings.minGapSmallMedium > 0) {
           final gapSM = mediumPrice - smallPrice;
-          if (gapSM < settings.minPriceGap) {
-            newResults['Medium']!['suggestedPrice'] = smallPrice + settings.minPriceGap;
+          if (gapSM < settings.minGapSmallMedium) {
+            final suggestedMedium = smallPrice + settings.minGapSmallMedium;
+            newResults['Medium']!['suggestedPrice'] = suggestedMedium;
+            
+            // Use suggested medium for cascading check
+            mediumPrice = suggestedMedium;
           }
         }
 
-        if (mediumPrice > 0 && largePrice > 0) {
+        // Check Medium-Large gap (with cascading from Medium adjustment)
+        if (mediumPrice > 0 && largePrice > 0 && settings.minGapMediumLarge > 0) {
           final gapML = largePrice - mediumPrice;
-          if (gapML < settings.minPriceGap) {
-            newResults['Large']!['suggestedPrice'] = mediumPrice + settings.minPriceGap;
+          if (gapML < settings.minGapMediumLarge) {
+            newResults['Large']!['suggestedPrice'] = mediumPrice + settings.minGapMediumLarge;
           }
         }
       }
