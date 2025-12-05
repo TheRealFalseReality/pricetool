@@ -2901,7 +2901,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   late TextEditingController _lTimeController, _lGramController;
   
   late String _selectedCategoryId;
-  Map<String, Map<String, double>> _pricingResult = {};
+  Map<String, Map<String, double?>> _pricingResult = {};
 
   bool get _isEditing => widget.product != null;
 
@@ -3030,7 +3030,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         'Large': {'time': double.tryParse(_lTimeController.text) ?? 0, 'grams': double.tryParse(_lGramController.text) ?? 0},
       };
 
-      Map<String, Map<String, double>> newResults = {};
+      Map<String, Map<String, double?>> newResults = {};
       final newVariations = <String, ProductVariation>{};
       
       // First pass: calculate all prices with avoidance zone
