@@ -2442,7 +2442,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         _buildTextField('avoidanceZoneThreshold', 'Threshold from Min (\$)'),
                         const SizedBox(height: 4),
                         Text(
-                          'Example: Min=34, Max=42, Threshold=4 means prices 34-38 round to 34, above 38 round to 42',
+                          'Example: Min=34, Max=42, Threshold=4 means prices 34.01-38.00 round to 34, prices 38.01-41.99 round to 42',
                           style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
                         ),
                       ],
@@ -2939,7 +2939,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   }
 
   double _applyAvoidanceZone(double price, double minZone, double maxZone, double threshold) {
-    // If avoidance zone is disabled (all are 0 or invalid), return original price
+    // If avoidance zone min/max are not configured properly, return original price
     if (minZone <= 0 || maxZone <= 0 || minZone >= maxZone) {
       return price;
     }
@@ -2947,7 +2947,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     // If price is within the avoidance zone (strictly greater than min and strictly less than max)
     if (price > minZone && price < maxZone) {
       // If threshold is set and valid, use threshold-based rounding
-      if (threshold > 0 && threshold < (maxZone - minZone)) {
+      if (threshold > 0 && threshold <= (maxZone - minZone)) {
         // If price is within threshold distance from min, round down to min
         if (price <= minZone + threshold) {
           return minZone;
@@ -2956,7 +2956,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           return maxZone;
         }
       } else {
-        // Fallback to nearest extreme if threshold is not configured properly
+        // Fallback to nearest extreme if threshold is 0 or not configured properly
         final distanceToMin = price - minZone;
         final distanceToMax = maxZone - price;
         
