@@ -175,6 +175,10 @@ class Settings extends HiveObject {
   late double avoidanceZoneMax;
   @HiveField(5)
   late double avoidanceZoneThreshold;
+  @HiveField(6)
+  late double smallPriceCap;
+  @HiveField(7)
+  late double minPriceGap;
 
   Settings.defaults() {
     electricityCostKwh = 0.15;
@@ -183,6 +187,8 @@ class Settings extends HiveObject {
     avoidanceZoneMin = 0;
     avoidanceZoneMax = 0;
     avoidanceZoneThreshold = 0;
+    smallPriceCap = 0;
+    minPriceGap = 0;
   }
   
   // For JSON serialization
@@ -193,6 +199,8 @@ class Settings extends HiveObject {
     'avoidanceZoneMin': avoidanceZoneMin,
     'avoidanceZoneMax': avoidanceZoneMax,
     'avoidanceZoneThreshold': avoidanceZoneThreshold,
+    'smallPriceCap': smallPriceCap,
+    'minPriceGap': minPriceGap,
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -202,7 +210,9 @@ class Settings extends HiveObject {
       ..etsyListingFee = (json['etsyListingFee'] as num).toDouble()
       ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
       ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
-      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble();
+      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble()
+      ..smallPriceCap = (json['smallPriceCap'] as num? ?? 0).toDouble()
+      ..minPriceGap = (json['minPriceGap'] as num? ?? 0).toDouble();
   }
   
   // Helper method to create from old settings for backward compatibility
@@ -213,7 +223,9 @@ class Settings extends HiveObject {
       ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble()
       ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
       ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble()
-      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble();
+      ..avoidanceZoneThreshold = (json['avoidanceZoneThreshold'] as num? ?? 0).toDouble()
+      ..smallPriceCap = (json['smallPriceCap'] as num? ?? 0).toDouble()
+      ..minPriceGap = (json['minPriceGap'] as num? ?? 0).toDouble();
   }
 }
 
@@ -361,13 +373,15 @@ class SettingsAdapter extends TypeAdapter<Settings> {
       ..etsyListingFee = fields[2] as double
       ..avoidanceZoneMin = fields.containsKey(3) ? fields[3] as double : 0
       ..avoidanceZoneMax = fields.containsKey(4) ? fields[4] as double : 0
-      ..avoidanceZoneThreshold = fields.containsKey(5) ? fields[5] as double : 0;
+      ..avoidanceZoneThreshold = fields.containsKey(5) ? fields[5] as double : 0
+      ..smallPriceCap = fields.containsKey(6) ? fields[6] as double : 0
+      ..minPriceGap = fields.containsKey(7) ? fields[7] as double : 0;
   }
 
   @override
   void write(BinaryWriter writer, Settings obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.electricityCostKwh)
       ..writeByte(1)
@@ -379,7 +393,11 @@ class SettingsAdapter extends TypeAdapter<Settings> {
       ..writeByte(4)
       ..write(obj.avoidanceZoneMax)
       ..writeByte(5)
-      ..write(obj.avoidanceZoneThreshold);
+      ..write(obj.avoidanceZoneThreshold)
+      ..writeByte(6)
+      ..write(obj.smallPriceCap)
+      ..writeByte(7)
+      ..write(obj.minPriceGap);
   }
 }
 
@@ -2117,6 +2135,8 @@ class _SettingsPageState extends State<SettingsPage> {
       'avoidanceZoneMin': TextEditingController(text: settings.avoidanceZoneMin.toString()),
       'avoidanceZoneMax': TextEditingController(text: settings.avoidanceZoneMax.toString()),
       'avoidanceZoneThreshold': TextEditingController(text: settings.avoidanceZoneThreshold.toString()),
+      'smallPriceCap': TextEditingController(text: settings.smallPriceCap.toString()),
+      'minPriceGap': TextEditingController(text: settings.minPriceGap.toString()),
     };
   }
   
@@ -2443,6 +2463,32 @@ class _SettingsPageState extends State<SettingsPage> {
                         const SizedBox(height: 4),
                         Text(
                           'Example: Min=34, Max=42, Threshold=4 means prices 34.01-38.00 round to 34, prices 38.01-41.99 round to 42',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Price Cap & Gap Settings',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Additional pricing adjustments applied after avoidance zone (avoidance zone takes priority)',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildTextField('smallPriceCap', 'Small Size Price Cap (\$)'),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Keep small model prices at or below this value (e.g., 20). Set to 0 to disable.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildTextField('minPriceGap', 'Minimum Price Gap (\$)'),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Try to maintain at least this gap between sizes (e.g., 8-10). Set to 0 to disable.',
                           style: TextStyle(fontSize: 11, color: Colors.grey[500], fontStyle: FontStyle.italic),
                         ),
                       ],
@@ -2987,6 +3033,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       Map<String, Map<String, double>> newResults = {};
       final newVariations = <String, ProductVariation>{};
       
+      // First pass: calculate all prices with avoidance zone
       variationsData.forEach((key, value) {
         final printTime = value['time']!;
         final filamentGrams = value['grams']!;
@@ -3006,13 +3053,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             // Apply even rounding first
             double roundedPrice = _roundToNearestEven(etsyPrice);
             
-            // Then apply avoidance zone with threshold
+            // Then apply avoidance zone with threshold (priority)
             calculatedPrice = _applyAvoidanceZone(roundedPrice, settings.avoidanceZoneMin, settings.avoidanceZoneMax, settings.avoidanceZoneThreshold);
 
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
               'etsyPrice': calculatedPrice,
               'profit': profitAmount,
+              'originalPrice': calculatedPrice, // Store original before caps/gaps
             };
         }
         newVariations[key] = ProductVariation(
@@ -3022,6 +3070,36 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           profit: profitAmount
         );
       });
+
+      // Second pass: apply small price cap and calculate suggested gap adjustments
+      if (newResults.containsKey('Small') && settings.smallPriceCap > 0) {
+        final smallPrice = newResults['Small']!['etsyPrice']!;
+        if (smallPrice > settings.smallPriceCap) {
+          newResults['Small']!['etsyPrice'] = settings.smallPriceCap;
+          newVariations['Small']!.etsyPrice = settings.smallPriceCap;
+        }
+      }
+
+      // Calculate suggested prices with gap adjustments (for reference only)
+      if (settings.minPriceGap > 0) {
+        final smallPrice = newResults['Small']?['etsyPrice'] ?? 0;
+        final mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
+        final largePrice = newResults['Large']?['etsyPrice'] ?? 0;
+
+        if (smallPrice > 0 && mediumPrice > 0) {
+          final gapSM = mediumPrice - smallPrice;
+          if (gapSM < settings.minPriceGap) {
+            newResults['Medium']!['suggestedPrice'] = smallPrice + settings.minPriceGap;
+          }
+        }
+
+        if (mediumPrice > 0 && largePrice > 0) {
+          final gapML = largePrice - mediumPrice;
+          if (gapML < settings.minPriceGap) {
+            newResults['Large']!['suggestedPrice'] = mediumPrice + settings.minPriceGap;
+          }
+        }
+      }
 
       setState(() {
          _pricingResult = newResults;
@@ -3286,7 +3364,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                           entry.key,
                           entry.value['totalProductionCost']!,
                           entry.value['profit']!,
-                          entry.value['etsyPrice']!
+                          entry.value['etsyPrice']!,
+                          entry.value['suggestedPrice'],
+                          entry.value['originalPrice']
                       );
                     }).toList(),
                 ],
@@ -3301,13 +3381,17 @@ class _ResultRow extends StatelessWidget {
   final double cost;
   final double profit;
   final double price;
+  final double? suggestedPrice;
+  final double? originalPrice;
 
-  const _ResultRow(this.label, this.cost, this.profit, this.price);
+  const _ResultRow(this.label, this.cost, this.profit, this.price, this.suggestedPrice, this.originalPrice);
 
   @override
   Widget build(BuildContext context) {
     final salePrice15 = price * 0.85;
     final salePrice25 = price * 0.75;
+    final hasSuggestion = suggestedPrice != null && suggestedPrice! != price;
+    final wasCapped = originalPrice != null && originalPrice! != price;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -3327,6 +3411,20 @@ class _ResultRow extends StatelessWidget {
                   '\$${price.toStringAsFixed(0)}',
                   style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold),
                 ),
+                if (wasCapped) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '(was \$${originalPrice!.toStringAsFixed(0)})',
+                    style: TextStyle(fontSize: 10, color: Colors.orange[300], fontStyle: FontStyle.italic),
+                  ),
+                ],
+                if (hasSuggestion) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Gap: \$${suggestedPrice!.toStringAsFixed(0)}',
+                    style: TextStyle(fontSize: 11, color: Colors.amber[300]),
+                  ),
+                ],
                 if (price > 0) ...[
                   const SizedBox(height: 4),
                   Text(
