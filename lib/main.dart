@@ -3060,7 +3060,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
               'totalProductionCost': totalProductionCost,
               'etsyPrice': calculatedPrice,
               'profit': profitAmount,
-              'originalPrice': calculatedPrice, // Store original before caps/gaps
+              'originalPrice': null, // Will be set if price is capped
             };
         }
         newVariations[key] = ProductVariation(
@@ -3075,6 +3075,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       if (newResults.containsKey('Small') && settings.smallPriceCap > 0) {
         final smallPrice = newResults['Small']!['etsyPrice']!;
         if (smallPrice > settings.smallPriceCap) {
+          newResults['Small']!['originalPrice'] = smallPrice; // Store original before cap
           newResults['Small']!['etsyPrice'] = settings.smallPriceCap;
           newVariations['Small']!.etsyPrice = settings.smallPriceCap;
         }
