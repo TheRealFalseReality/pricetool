@@ -103,12 +103,15 @@ class ProductVariation extends HiveObject {
   late double etsyPrice;
   @HiveField(3) // New field to store the calculated profit
   late double profit;
+  @HiveField(4) // Field to store the original unadjusted price
+  late double originalPrice;
 
   ProductVariation({
     this.printTimeHours = 0.0,
     this.filamentGrams = 0.0,
     this.etsyPrice = 0.0,
     this.profit = 0.0,
+    this.originalPrice = 0.0,
   });
   
   // For JSON serialization
@@ -117,6 +120,7 @@ class ProductVariation extends HiveObject {
     'filamentGrams': filamentGrams,
     'etsyPrice': etsyPrice,
     'profit': profit,
+    'originalPrice': originalPrice,
   };
 
   factory ProductVariation.fromJson(Map<String, dynamic> json) => ProductVariation(
@@ -124,6 +128,7 @@ class ProductVariation extends HiveObject {
     filamentGrams: (json['filamentGrams'] as num).toDouble(),
     etsyPrice: (json['etsyPrice'] as num? ?? 0.0).toDouble(), // Handle legacy data
     profit: (json['profit'] as num? ?? 0.0).toDouble(), // Handle legacy data
+    originalPrice: (json['originalPrice'] as num? ?? 0.0).toDouble(), // Handle legacy data
   );
 }
 
@@ -306,13 +311,14 @@ class ProductVariationAdapter extends TypeAdapter<ProductVariation> {
       filamentGrams: fields[1] as double,
       etsyPrice: fields[2] as double,
       profit: fields.containsKey(3) ? fields[3] as double : 0.0, // Backwards compatible
+      originalPrice: fields.containsKey(4) ? fields[4] as double : 0.0, // Backwards compatible
     );
   }
 
   @override
   void write(BinaryWriter writer, ProductVariation obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.printTimeHours)
       ..writeByte(1)
@@ -320,7 +326,9 @@ class ProductVariationAdapter extends TypeAdapter<ProductVariation> {
       ..writeByte(2)
       ..write(obj.etsyPrice)
       ..writeByte(3)
-      ..write(obj.profit);
+      ..write(obj.profit)
+      ..writeByte(4)
+      ..write(obj.originalPrice);
   }
 }
 
@@ -2989,7 +2997,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         'Large': product.largeVariation,
       };
 
-      Map<String, Map<String, double>> newResults = {};
+      Map<String, Map<String, double?>> newResults = {};
       
       variations.forEach((key, variation) {
         if (variation.etsyPrice > 0) {
@@ -2998,10 +3006,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             final calculatedElectricityCost = variation.printTimeHours * settings.electricityCostKwh;
             final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + category.laborCost + category.licenseFee;
 
+            // Determine if the price was adjusted (different from original)
+            final wasAdjusted = variation.originalPrice > 0 && variation.originalPrice != variation.etsyPrice;
+
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
               'etsyPrice': variation.etsyPrice,
               'profit': variation.profit,
+              'originalPrice': wasAdjusted ? variation.originalPrice : null,
             };
         }
       });
@@ -3071,6 +3083,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         final filamentGrams = value['grams']!;
         double calculatedPrice = 0;
         double profitAmount = 0;
+        double originalPriceValue = 0;
         
         if (printTime > 0 && filamentGrams > 0) {
             final filamentCostPerGram = category.filamentCostPerKg / 1000;
@@ -3087,60 +3100,75 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             
             // Then apply avoidance zone with threshold (priority)
             calculatedPrice = _applyAvoidanceZone(roundedPrice, category.avoidanceZoneMin, category.avoidanceZoneMax, category.avoidanceZoneThreshold);
+            
+            // Store the price after avoidance zone as the original (before cap/gap adjustments)
+            originalPriceValue = calculatedPrice;
 
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
               'etsyPrice': calculatedPrice,
               'profit': profitAmount,
-              'originalPrice': null, // Will be set if price is capped
+              'originalPrice': null, // Will be set if price is capped or gap-adjusted
             };
         }
         newVariations[key] = ProductVariation(
           printTimeHours: printTime, 
           filamentGrams: filamentGrams, 
           etsyPrice: calculatedPrice,
-          profit: profitAmount
+          profit: profitAmount,
+          originalPrice: originalPriceValue
         );
       });
 
-      // Second pass: apply small price cap and calculate suggested gap adjustments
+      // Second pass: apply small price cap
       if (newResults.containsKey('Small') && category.smallPriceCap > 0) {
         final smallPrice = newResults['Small']!['etsyPrice']!;
         if (smallPrice > category.smallPriceCap) {
-          newResults['Small']!['originalPrice'] = smallPrice; // Store original before cap
+          newResults['Small']!['originalPrice'] = smallPrice; // Store original before cap for display
           newResults['Small']!['etsyPrice'] = category.smallPriceCap;
           newVariations['Small']!.etsyPrice = category.smallPriceCap;
+          // Keep originalPrice as the unadjusted value
         }
       }
 
-      // Apply cascading gap adjustments
+      // Apply cascading gap adjustments - only increase prices, never decrease
       if (category.minGapSmallMedium > 0 || category.minGapMediumLarge > 0) {
         final smallPrice = newResults['Small']?['etsyPrice'] ?? 0;
         double mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
+        final mediumOriginalPrice = newVariations['Medium']?.originalPrice ?? 0;
         double largePrice = newResults['Large']?['etsyPrice'] ?? 0;
+        final largeOriginalPrice = newVariations['Large']?.originalPrice ?? 0;
 
-        // Check Small-Medium gap
+        // Check Small-Medium gap - only adjust if it increases the price above the original
         if (smallPrice > 0 && mediumPrice > 0 && category.minGapSmallMedium > 0) {
           final gapSM = mediumPrice - smallPrice;
           if (gapSM < category.minGapSmallMedium) {
             final adjustedMedium = smallPrice + category.minGapSmallMedium;
-            newResults['Medium']!['originalPrice'] = mediumPrice; // Store original
-            newResults['Medium']!['etsyPrice'] = adjustedMedium;
-            newVariations['Medium']!.etsyPrice = adjustedMedium;
-            
-            // Use adjusted medium for cascading check
-            mediumPrice = adjustedMedium;
+            // Only apply if adjustment increases price above original unadjusted price
+            if (adjustedMedium > mediumOriginalPrice) {
+              newResults['Medium']!['originalPrice'] = mediumOriginalPrice; // Store original for display
+              newResults['Medium']!['etsyPrice'] = adjustedMedium;
+              newVariations['Medium']!.etsyPrice = adjustedMedium;
+              // Keep originalPrice as the unadjusted value
+              
+              // Use adjusted medium for cascading check
+              mediumPrice = adjustedMedium;
+            }
           }
         }
 
-        // Check Medium-Large gap (with cascading from Medium adjustment)
+        // Check Medium-Large gap (with cascading from Medium adjustment) - only adjust if it increases above original
         if (mediumPrice > 0 && largePrice > 0 && category.minGapMediumLarge > 0) {
           final gapML = largePrice - mediumPrice;
           if (gapML < category.minGapMediumLarge) {
             final adjustedLarge = mediumPrice + category.minGapMediumLarge;
-            newResults['Large']!['originalPrice'] = largePrice; // Store original
-            newResults['Large']!['etsyPrice'] = adjustedLarge;
-            newVariations['Large']!.etsyPrice = adjustedLarge;
+            // Only apply if adjustment increases price above original unadjusted price
+            if (adjustedLarge > largeOriginalPrice) {
+              newResults['Large']!['originalPrice'] = largeOriginalPrice; // Store original for display
+              newResults['Large']!['etsyPrice'] = adjustedLarge;
+              newVariations['Large']!.etsyPrice = adjustedLarge;
+              // Keep originalPrice as the unadjusted value
+            }
           }
         }
       }
@@ -3434,7 +3462,7 @@ class _ResultRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final salePrice15 = price * 0.85;
     final salePrice25 = price * 0.75;
-    final wasAdjusted = originalPrice != null && originalPrice! != price;
+    final wasAdjusted = originalPrice != null && originalPrice! > 0 && originalPrice! != price;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
