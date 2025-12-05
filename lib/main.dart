@@ -3099,7 +3099,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         }
       }
 
-      // Calculate suggested prices with cascading gap adjustments (for reference only)
+      // Apply cascading gap adjustments
       if (settings.minGapSmallMedium > 0 || settings.minGapMediumLarge > 0) {
         final smallPrice = newResults['Small']?['etsyPrice'] ?? 0;
         double mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
@@ -3109,11 +3109,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         if (smallPrice > 0 && mediumPrice > 0 && settings.minGapSmallMedium > 0) {
           final gapSM = mediumPrice - smallPrice;
           if (gapSM < settings.minGapSmallMedium) {
-            final suggestedMedium = smallPrice + settings.minGapSmallMedium;
-            newResults['Medium']!['suggestedPrice'] = suggestedMedium;
+            final adjustedMedium = smallPrice + settings.minGapSmallMedium;
+            newResults['Medium']!['originalPrice'] = mediumPrice; // Store original
+            newResults['Medium']!['etsyPrice'] = adjustedMedium;
+            newVariations['Medium']!.etsyPrice = adjustedMedium;
             
-            // Use suggested medium for cascading check
-            mediumPrice = suggestedMedium;
+            // Use adjusted medium for cascading check
+            mediumPrice = adjustedMedium;
           }
         }
 
@@ -3121,7 +3123,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         if (mediumPrice > 0 && largePrice > 0 && settings.minGapMediumLarge > 0) {
           final gapML = largePrice - mediumPrice;
           if (gapML < settings.minGapMediumLarge) {
-            newResults['Large']!['suggestedPrice'] = mediumPrice + settings.minGapMediumLarge;
+            final adjustedLarge = mediumPrice + settings.minGapMediumLarge;
+            newResults['Large']!['originalPrice'] = largePrice; // Store original
+            newResults['Large']!['etsyPrice'] = adjustedLarge;
+            newVariations['Large']!.etsyPrice = adjustedLarge;
           }
         }
       }
@@ -3415,8 +3420,7 @@ class _ResultRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final salePrice15 = price * 0.85;
     final salePrice25 = price * 0.75;
-    final hasSuggestion = suggestedPrice != null && suggestedPrice! != price;
-    final wasCapped = originalPrice != null && originalPrice! != price;
+    final wasAdjusted = originalPrice != null && originalPrice! != price;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -3436,18 +3440,11 @@ class _ResultRow extends StatelessWidget {
                   '\$${price.toStringAsFixed(0)}',
                   style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold),
                 ),
-                if (wasCapped) ...[
+                if (wasAdjusted) ...[
                   const SizedBox(height: 2),
                   Text(
                     '(was \$${originalPrice!.toStringAsFixed(0)})',
-                    style: TextStyle(fontSize: 10, color: Colors.orange[300], fontStyle: FontStyle.italic),
-                  ),
-                ],
-                if (hasSuggestion) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Gap: \$${suggestedPrice!.toStringAsFixed(0)}',
-                    style: TextStyle(fontSize: 11, color: Colors.amber[300]),
+                    style: TextStyle(fontSize: 10, color: Colors.amber[300], fontStyle: FontStyle.italic),
                   ),
                 ],
                 if (price > 0) ...[
