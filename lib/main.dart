@@ -3124,10 +3124,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       if (newResults.containsKey('Small') && category.smallPriceCap > 0) {
         final smallPrice = newResults['Small']!['etsyPrice']!;
         if (smallPrice > category.smallPriceCap) {
-          newResults['Small']!['originalPrice'] = smallPrice; // Store original before cap for display
+          // Store price after avoidance zone (before cap) for display
+          newResults['Small']!['originalPrice'] = smallPrice;
           newResults['Small']!['etsyPrice'] = category.smallPriceCap;
           newVariations['Small']!.etsyPrice = category.smallPriceCap;
-          // Keep originalPrice as the unadjusted value
+          // Note: ProductVariation.originalPrice already contains the pre-cap price
         }
       }
 
@@ -3135,8 +3136,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       if (category.minGapSmallMedium > 0 || category.minGapMediumLarge > 0) {
         final smallPrice = newResults['Small']?['etsyPrice'] ?? 0;
         double mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
+        // Get original price (after avoidance zone, before gap adjustments)
         final mediumOriginalPrice = newVariations['Medium']?.originalPrice ?? 0;
         double largePrice = newResults['Large']?['etsyPrice'] ?? 0;
+        // Get original price (after avoidance zone, before gap adjustments)
         final largeOriginalPrice = newVariations['Large']?.originalPrice ?? 0;
 
         // Check Small-Medium gap - only adjust if it increases the price above the original
