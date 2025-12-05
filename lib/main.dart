@@ -169,11 +169,17 @@ class Settings extends HiveObject {
   late double etsyFeesPercent;
   @HiveField(2)
   late double etsyListingFee;
+  @HiveField(3)
+  late double avoidanceZoneMin;
+  @HiveField(4)
+  late double avoidanceZoneMax;
 
   Settings.defaults() {
     electricityCostKwh = 0.15;
     etsyFeesPercent = 9.5;
     etsyListingFee = 0.20;
+    avoidanceZoneMin = 0;
+    avoidanceZoneMax = 0;
   }
   
   // For JSON serialization
@@ -181,13 +187,17 @@ class Settings extends HiveObject {
     'electricityCostKwh': electricityCostKwh,
     'etsyFeesPercent': etsyFeesPercent,
     'etsyListingFee': etsyListingFee,
+    'avoidanceZoneMin': avoidanceZoneMin,
+    'avoidanceZoneMax': avoidanceZoneMax,
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) {
     return Settings.defaults()
       ..electricityCostKwh = (json['electricityCostKwh'] as num).toDouble()
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num).toDouble()
-      ..etsyListingFee = (json['etsyListingFee'] as num).toDouble();
+      ..etsyListingFee = (json['etsyListingFee'] as num).toDouble()
+      ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
+      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble();
   }
   
   // Helper method to create from old settings for backward compatibility
@@ -195,7 +205,9 @@ class Settings extends HiveObject {
     return Settings.defaults()
       ..electricityCostKwh = (json['electricityCostKwh'] as num? ?? 0.15).toDouble()
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num? ?? 9.5).toDouble()
-      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble();
+      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble()
+      ..avoidanceZoneMin = (json['avoidanceZoneMin'] as num? ?? 0).toDouble()
+      ..avoidanceZoneMax = (json['avoidanceZoneMax'] as num? ?? 0).toDouble();
   }
 }
 
@@ -340,19 +352,25 @@ class SettingsAdapter extends TypeAdapter<Settings> {
     return Settings.defaults()
       ..electricityCostKwh = fields[0] as double
       ..etsyFeesPercent = fields[1] as double
-      ..etsyListingFee = fields[2] as double;
+      ..etsyListingFee = fields[2] as double
+      ..avoidanceZoneMin = fields.containsKey(3) ? fields[3] as double : 0
+      ..avoidanceZoneMax = fields.containsKey(4) ? fields[4] as double : 0;
   }
 
   @override
   void write(BinaryWriter writer, Settings obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.electricityCostKwh)
       ..writeByte(1)
       ..write(obj.etsyFeesPercent)
       ..writeByte(2)
-      ..write(obj.etsyListingFee);
+      ..write(obj.etsyListingFee)
+      ..writeByte(3)
+      ..write(obj.avoidanceZoneMin)
+      ..writeByte(4)
+      ..write(obj.avoidanceZoneMax);
   }
 }
 
@@ -2087,6 +2105,8 @@ class _SettingsPageState extends State<SettingsPage> {
       'electricityCostKwh': TextEditingController(text: settings.electricityCostKwh.toString()),
       'etsyFeesPercent': TextEditingController(text: settings.etsyFeesPercent.toString()),
       'etsyListingFee': TextEditingController(text: settings.etsyListingFee.toString()),
+      'avoidanceZoneMin': TextEditingController(text: settings.avoidanceZoneMin.toString()),
+      'avoidanceZoneMax': TextEditingController(text: settings.avoidanceZoneMax.toString()),
     };
   }
   
@@ -2394,6 +2414,21 @@ class _SettingsPageState extends State<SettingsPage> {
                         _buildTextField('electricityCostKwh', 'Electricity Cost (\$/kWh)'),
                         _buildTextField('etsyFeesPercent', 'Etsy Fees (%)'),
                         _buildTextField('etsyListingFee', 'Etsy Listing Fee (\$)'),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Price Avoidance Zone',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Prices between these values will be rounded to the nearest extreme. Set both to 0 to disable.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildTextField('avoidanceZoneMin', 'Minimum Price (\$)'),
+                        _buildTextField('avoidanceZoneMax', 'Maximum Price (\$)'),
                       ],
                     ),
                   ),
@@ -2887,6 +2922,30 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       return roundedUp;
   }
 
+  double _applyAvoidanceZone(double price, double minZone, double maxZone) {
+    // If avoidance zone is disabled (both are 0 or invalid), return original price
+    if (minZone <= 0 || maxZone <= 0 || minZone >= maxZone) {
+      return price;
+    }
+    
+    // If price is within the avoidance zone (strictly greater than min and strictly less than max)
+    if (price > minZone && price < maxZone) {
+      // Calculate distance to both extremes
+      final distanceToMin = price - minZone;
+      final distanceToMax = maxZone - price;
+      
+      // Round to the nearest extreme
+      if (distanceToMin < distanceToMax) {
+        return minZone;
+      } else {
+        return maxZone;
+      }
+    }
+    
+    // Price is outside the avoidance zone, return as-is
+    return price;
+  }
+
   void _calculateAndSave() {
     if (_formKey.currentState!.validate()) {
       final state = context.read<DataBloc>().state;
@@ -2917,7 +2976,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             profitAmount = totalProductionCost * (category.profitMargin / 100);
             final targetAmount = totalProductionCost + profitAmount + category.shippingCost;
             final etsyPrice = (targetAmount + settings.etsyListingFee) / (1 - (settings.etsyFeesPercent / 100));
-            calculatedPrice = _roundToNearestEven(etsyPrice);
+            
+            // Apply even rounding first
+            double roundedPrice = _roundToNearestEven(etsyPrice);
+            
+            // Then apply avoidance zone
+            calculatedPrice = _applyAvoidanceZone(roundedPrice, settings.avoidanceZoneMin, settings.avoidanceZoneMax);
 
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
