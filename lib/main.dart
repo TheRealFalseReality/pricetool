@@ -155,11 +155,11 @@ class Product extends HiveObject {
   @HiveField(9)
   late String categoryId;
   @HiveField(10)
-  late ProductVariation? smallMulticolorVariation;
+  ProductVariation? smallMulticolorVariation;
   @HiveField(11)
-  late ProductVariation? mediumMulticolorVariation;
+  ProductVariation? mediumMulticolorVariation;
   @HiveField(12)
-  late ProductVariation? largeMulticolorVariation;
+  ProductVariation? largeMulticolorVariation;
 
   Product({
     required this.id,
@@ -806,8 +806,16 @@ class _HomePageState extends State<HomePage> {
     }
   }
   
+  void _addVariationToDisplay(List<String> parts, ProductVariation? variation, String label) {
+    if (variation != null && variation.etsyPrice > 0) {
+      parts.add('$label: \$${variation.etsyPrice.toStringAsFixed(0)}${variation.profit > 0 ? ' (\$${variation.profit.toStringAsFixed(2)})' : ''}');
+    }
+  }
+
   String _formatPrices(Product product) {
     final parts = <String>[];
+    
+    // Single-color variations with profit display
     if (product.smallVariation.etsyPrice > 0) {
       parts.add('S: \$${product.smallVariation.etsyPrice.toStringAsFixed(0)} (\$${product.smallVariation.profit.toStringAsFixed(2)})');
     }
@@ -819,52 +827,37 @@ class _HomePageState extends State<HomePage> {
     }
     
     // Add multicolor prices if they exist
-    if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
-      parts.add('MC-S: \$${product.smallMulticolorVariation!.etsyPrice.toStringAsFixed(0)}');
-    }
-    if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
-      parts.add('MC-M: \$${product.mediumMulticolorVariation!.etsyPrice.toStringAsFixed(0)}');
-    }
-    if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
-      parts.add('MC-L: \$${product.largeMulticolorVariation!.etsyPrice.toStringAsFixed(0)}');
-    }
+    _addVariationToDisplay(parts, product.smallMulticolorVariation, 'MC-S');
+    _addVariationToDisplay(parts, product.mediumMulticolorVariation, 'MC-M');
+    _addVariationToDisplay(parts, product.largeMulticolorVariation, 'MC-L');
     
     return parts.join(' | ');
+  }
+
+  void _addVariationToAverage(ProductVariation? variation, List<double> prices) {
+    if (variation != null && variation.etsyPrice > 0) {
+      prices.add(variation.etsyPrice);
+    }
   }
 
   void _showAddSaleDialog(BuildContext context, Product product) {
     final priceController = TextEditingController();
     
-    // Calculate average price from variations (including multicolor)
-    double avgPrice = 0;
-    int count = 0;
-    if (product.smallVariation.etsyPrice > 0) {
-      avgPrice += product.smallVariation.etsyPrice;
-      count++;
-    }
-    if (product.mediumVariation.etsyPrice > 0) {
-      avgPrice += product.mediumVariation.etsyPrice;
-      count++;
-    }
-    if (product.largeVariation.etsyPrice > 0) {
-      avgPrice += product.largeVariation.etsyPrice;
-      count++;
-    }
-    // Include multicolor variations in average
-    if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
-      avgPrice += product.smallMulticolorVariation!.etsyPrice;
-      count++;
-    }
-    if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
-      avgPrice += product.mediumMulticolorVariation!.etsyPrice;
-      count++;
-    }
-    if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
-      avgPrice += product.largeMulticolorVariation!.etsyPrice;
-      count++;
-    }
-    if (count > 0) {
-      avgPrice = avgPrice / count;
+    // Calculate average price from all variations (including multicolor)
+    final prices = <double>[];
+    
+    // Add single-color variations
+    if (product.smallVariation.etsyPrice > 0) prices.add(product.smallVariation.etsyPrice);
+    if (product.mediumVariation.etsyPrice > 0) prices.add(product.mediumVariation.etsyPrice);
+    if (product.largeVariation.etsyPrice > 0) prices.add(product.largeVariation.etsyPrice);
+    
+    // Add multicolor variations
+    _addVariationToAverage(product.smallMulticolorVariation, prices);
+    _addVariationToAverage(product.mediumMulticolorVariation, prices);
+    _addVariationToAverage(product.largeMulticolorVariation, prices);
+    
+    if (prices.isNotEmpty) {
+      final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
       priceController.text = avgPrice.toStringAsFixed(2);
     }
 
@@ -1181,6 +1174,13 @@ class _HomePageState extends State<HomePage> {
 class StatisticsPage extends StatelessWidget {
   const StatisticsPage({super.key});
 
+  void _addVariationToStats(ProductVariation? variation, 
+      {required double Function() onAdd}) {
+    if (variation != null && variation.etsyPrice > 0) {
+      onAdd();
+    }
+  }
+
   Map<String, dynamic> _calculateStatistics(DataState state) {
     if (state.products.isEmpty) {
       return {
@@ -1217,43 +1217,28 @@ class StatisticsPage extends StatelessWidget {
       totalSalesCount += product.totalSales;
       totalActualRevenue += product.totalRevenue;
 
-      if (product.smallVariation.etsyPrice > 0) {
-        productTotalRevenue += product.smallVariation.etsyPrice;
-        productTotalProfit += product.smallVariation.profit;
+      // Helper to add variation stats
+      void addVariation(ProductVariation variation) {
+        productTotalRevenue += variation.etsyPrice;
+        productTotalProfit += variation.profit;
         variationCount++;
         productVariations++;
       }
-      if (product.mediumVariation.etsyPrice > 0) {
-        productTotalRevenue += product.mediumVariation.etsyPrice;
-        productTotalProfit += product.mediumVariation.profit;
-        variationCount++;
-        productVariations++;
-      }
-      if (product.largeVariation.etsyPrice > 0) {
-        productTotalRevenue += product.largeVariation.etsyPrice;
-        productTotalProfit += product.largeVariation.profit;
-        variationCount++;
-        productVariations++;
-      }
+
+      // Process single-color variations
+      if (product.smallVariation.etsyPrice > 0) addVariation(product.smallVariation);
+      if (product.mediumVariation.etsyPrice > 0) addVariation(product.mediumVariation);
+      if (product.largeVariation.etsyPrice > 0) addVariation(product.largeVariation);
       
-      // Include multicolor variations in statistics
+      // Process multicolor variations
       if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
-        productTotalRevenue += product.smallMulticolorVariation!.etsyPrice;
-        productTotalProfit += product.smallMulticolorVariation!.profit;
-        variationCount++;
-        productVariations++;
+        addVariation(product.smallMulticolorVariation!);
       }
       if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
-        productTotalRevenue += product.mediumMulticolorVariation!.etsyPrice;
-        productTotalProfit += product.mediumMulticolorVariation!.profit;
-        variationCount++;
-        productVariations++;
+        addVariation(product.mediumMulticolorVariation!);
       }
       if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
-        productTotalRevenue += product.largeMulticolorVariation!.etsyPrice;
-        productTotalProfit += product.largeMulticolorVariation!.profit;
-        variationCount++;
-        productVariations++;
+        addVariation(product.largeMulticolorVariation!);
       }
 
       if (productVariations > 0) {
