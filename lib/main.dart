@@ -154,6 +154,12 @@ class Product extends HiveObject {
   late double totalRevenue;
   @HiveField(9)
   late String categoryId;
+  @HiveField(10)
+  late ProductVariation? smallMulticolorVariation;
+  @HiveField(11)
+  late ProductVariation? mediumMulticolorVariation;
+  @HiveField(12)
+  late ProductVariation? largeMulticolorVariation;
 
   Product({
     required this.id,
@@ -166,6 +172,9 @@ class Product extends HiveObject {
     this.totalSales = 0,
     this.totalRevenue = 0.0,
     required this.categoryId,
+    this.smallMulticolorVariation,
+    this.mediumMulticolorVariation,
+    this.largeMulticolorVariation,
   });
 
   // For JSON serialization
@@ -180,6 +189,9 @@ class Product extends HiveObject {
     'totalSales': totalSales,
     'totalRevenue': totalRevenue,
     'categoryId': categoryId,
+    'smallMulticolorVariation': smallMulticolorVariation?.toJson(),
+    'mediumMulticolorVariation': mediumMulticolorVariation?.toJson(),
+    'largeMulticolorVariation': largeMulticolorVariation?.toJson(),
   };
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -193,6 +205,15 @@ class Product extends HiveObject {
     totalSales: (json['totalSales'] as num? ?? 0).toInt(),
     totalRevenue: (json['totalRevenue'] as num? ?? 0.0).toDouble(),
     categoryId: json['categoryId'] as String? ?? 'default_3d_models', // Default for backward compatibility
+    smallMulticolorVariation: json['smallMulticolorVariation'] != null 
+        ? ProductVariation.fromJson(json['smallMulticolorVariation'])
+        : null,
+    mediumMulticolorVariation: json['mediumMulticolorVariation'] != null 
+        ? ProductVariation.fromJson(json['mediumMulticolorVariation'])
+        : null,
+    largeMulticolorVariation: json['largeMulticolorVariation'] != null 
+        ? ProductVariation.fromJson(json['largeMulticolorVariation'])
+        : null,
   );
 }
 
@@ -353,13 +374,16 @@ class ProductAdapter extends TypeAdapter<Product> {
       totalSales: fields.containsKey(7) ? fields[7] as int : 0,
       totalRevenue: fields.containsKey(8) ? fields[8] as double : 0.0,
       categoryId: fields.containsKey(9) ? fields[9] as String : 'default_3d_models',
+      smallMulticolorVariation: fields.containsKey(10) ? fields[10] as ProductVariation? : null,
+      mediumMulticolorVariation: fields.containsKey(11) ? fields[11] as ProductVariation? : null,
+      largeMulticolorVariation: fields.containsKey(12) ? fields[12] as ProductVariation? : null,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -379,7 +403,13 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(8)
       ..write(obj.totalRevenue)
       ..writeByte(9)
-      ..write(obj.categoryId);
+      ..write(obj.categoryId)
+      ..writeByte(10)
+      ..write(obj.smallMulticolorVariation)
+      ..writeByte(11)
+      ..write(obj.mediumMulticolorVariation)
+      ..writeByte(12)
+      ..write(obj.largeMulticolorVariation);
   }
 }
 
@@ -787,6 +817,18 @@ class _HomePageState extends State<HomePage> {
     if (product.largeVariation.etsyPrice > 0) {
       parts.add('L: \$${product.largeVariation.etsyPrice.toStringAsFixed(0)} (\$${product.largeVariation.profit.toStringAsFixed(2)})');
     }
+    
+    // Add multicolor prices if they exist
+    if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
+      parts.add('MC-S: \$${product.smallMulticolorVariation!.etsyPrice.toStringAsFixed(0)}');
+    }
+    if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
+      parts.add('MC-M: \$${product.mediumMulticolorVariation!.etsyPrice.toStringAsFixed(0)}');
+    }
+    if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
+      parts.add('MC-L: \$${product.largeMulticolorVariation!.etsyPrice.toStringAsFixed(0)}');
+    }
+    
     return parts.join(' | ');
   }
 
@@ -2934,11 +2976,17 @@ class ProductDetailPage extends StatefulWidget {
 class _ProductDetailPageState extends State<ProductDetailPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   late TabController _tabController;
+  late TabController _multicolorTabController;
   
   late TextEditingController _nameController, _imageUrlController, _listingUrlController;
   late TextEditingController _sTimeController, _sGramController;
   late TextEditingController _mTimeController, _mGramController;
   late TextEditingController _lTimeController, _lGramController;
+  
+  // Multicolor variation controllers
+  late TextEditingController _sMcTimeController, _sMcGramController;
+  late TextEditingController _mMcTimeController, _mMcGramController;
+  late TextEditingController _lMcTimeController, _lMcGramController;
   
   late String _selectedCategoryId;
   Map<String, Map<String, double?>> _pricingResult = {};
@@ -2949,6 +2997,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _multicolorTabController = TabController(length: 3, vsync: this);
     
     _nameController = TextEditingController(text: widget.product?.name ?? '');
     _imageUrlController = TextEditingController(text: widget.product?.imageUrl ?? '');
@@ -2960,6 +3009,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     _mGramController = TextEditingController(text: widget.product?.mediumVariation.filamentGrams.toString() ?? '0');
     _lTimeController = TextEditingController(text: widget.product?.largeVariation.printTimeHours.toString() ?? '0');
     _lGramController = TextEditingController(text: widget.product?.largeVariation.filamentGrams.toString() ?? '0');
+
+    // Multicolor variation controllers
+    _sMcTimeController = TextEditingController(text: widget.product?.smallMulticolorVariation?.printTimeHours.toString() ?? '0');
+    _sMcGramController = TextEditingController(text: widget.product?.smallMulticolorVariation?.filamentGrams.toString() ?? '0');
+    _mMcTimeController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.printTimeHours.toString() ?? '0');
+    _mMcGramController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.filamentGrams.toString() ?? '0');
+    _lMcTimeController = TextEditingController(text: widget.product?.largeMulticolorVariation?.printTimeHours.toString() ?? '0');
+    _lMcGramController = TextEditingController(text: widget.product?.largeMulticolorVariation?.filamentGrams.toString() ?? '0');
 
     // Set initial category
     final categories = context.read<DataBloc>().state.categories;
@@ -2974,6 +3031,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   @override
   void dispose() {
     _tabController.dispose();
+    _multicolorTabController.dispose();
     _nameController.dispose();
     _imageUrlController.dispose();
     _listingUrlController.dispose();
@@ -2983,6 +3041,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     _mGramController.dispose();
     _lTimeController.dispose();
     _lGramController.dispose();
+    _sMcTimeController.dispose();
+    _sMcGramController.dispose();
+    _mMcTimeController.dispose();
+    _mMcGramController.dispose();
+    _lMcTimeController.dispose();
+    _lMcGramController.dispose();
     super.dispose();
   }
   
@@ -2996,6 +3060,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         'Medium': product.mediumVariation,
         'Large': product.largeVariation,
       };
+
+      // Add multicolor variations if they exist
+      if (product.smallMulticolorVariation != null) {
+        variations['Multicolor Small'] = product.smallMulticolorVariation!;
+      }
+      if (product.mediumMulticolorVariation != null) {
+        variations['Multicolor Medium'] = product.mediumMulticolorVariation!;
+      }
+      if (product.largeMulticolorVariation != null) {
+        variations['Multicolor Large'] = product.largeMulticolorVariation!;
+      }
 
       Map<String, Map<String, double?>> newResults = {};
       
@@ -3073,12 +3148,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         'Medium': {'time': double.tryParse(_mTimeController.text) ?? 0, 'grams': double.tryParse(_mGramController.text) ?? 0},
         'Large': {'time': double.tryParse(_lTimeController.text) ?? 0, 'grams': double.tryParse(_lGramController.text) ?? 0},
       };
+      
+      // Multicolor variations data
+      final multicolorVariationsData = {
+        'Multicolor Small': {'time': double.tryParse(_sMcTimeController.text) ?? 0, 'grams': double.tryParse(_sMcGramController.text) ?? 0},
+        'Multicolor Medium': {'time': double.tryParse(_mMcTimeController.text) ?? 0, 'grams': double.tryParse(_mMcGramController.text) ?? 0},
+        'Multicolor Large': {'time': double.tryParse(_lMcTimeController.text) ?? 0, 'grams': double.tryParse(_lMcGramController.text) ?? 0},
+      };
 
       Map<String, Map<String, double?>> newResults = {};
       final newVariations = <String, ProductVariation>{};
       
-      // First pass: calculate all prices with avoidance zone
-      variationsData.forEach((key, value) {
+      // Helper function to calculate price for a variation
+      void calculateVariationPrice(String key, Map<String, double> value) {
         final printTime = value['time']!;
         final filamentGrams = value['grams']!;
         double calculatedPrice = 0;
@@ -3118,9 +3200,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           profit: profitAmount,
           originalPrice: originalPriceValue
         );
-      });
+      }
+      
+      // First pass: calculate all prices with avoidance zone
+      variationsData.forEach(calculateVariationPrice);
+      multicolorVariationsData.forEach(calculateVariationPrice);
 
-      // Second pass: apply small price cap
+      // Second pass: apply small price cap (only for single-color small)
       if (newResults.containsKey('Small') && category.smallPriceCap > 0) {
         final smallPrice = newResults['Small']!['etsyPrice']!;
         if (smallPrice > category.smallPriceCap) {
@@ -3191,6 +3277,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         mediumVariation: newVariations['Medium']!,
         largeVariation: newVariations['Large']!,
         categoryId: _selectedCategoryId,
+        smallMulticolorVariation: newVariations['Multicolor Small'],
+        mediumMulticolorVariation: newVariations['Multicolor Medium'],
+        largeMulticolorVariation: newVariations['Multicolor Large'],
       );
       
       if (_isEditing) {
@@ -3341,6 +3430,48 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                         _buildVariationTab(_sTimeController, _sGramController),
                         _buildVariationTab(_mTimeController, _mGramController),
                         _buildVariationTab(_lTimeController, _lGramController),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.palette, color: Theme.of(context).colorScheme.secondary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Multicolor Variations (Optional)',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TabBar(
+                    controller: _multicolorTabController,
+                    labelColor: Theme.of(context).colorScheme.secondary,
+                    tabs: const [
+                      Tab(text: 'MC Small'),
+                      Tab(text: 'MC Medium'),
+                      Tab(text: 'MC Large'),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 180,
+                    child: TabBarView(
+                      controller: _multicolorTabController,
+                      children: [
+                        _buildVariationTab(_sMcTimeController, _sMcGramController),
+                        _buildVariationTab(_mMcTimeController, _mMcGramController),
+                        _buildVariationTab(_lMcTimeController, _lMcGramController),
                       ],
                     ),
                   ),
