@@ -44,6 +44,8 @@ class Category extends HiveObject {
   late double minGapMediumLarge;
   @HiveField(13)
   late double multicolorSmallPriceCap;
+  @HiveField(14)
+  late double multicolorSmallPriceMin;
 
   Category({
     required this.id,
@@ -60,6 +62,7 @@ class Category extends HiveObject {
     this.minGapSmallMedium = 0,
     this.minGapMediumLarge = 0,
     this.multicolorSmallPriceCap = 0,
+    this.multicolorSmallPriceMin = 0,
   });
 
   // For JSON serialization
@@ -78,6 +81,7 @@ class Category extends HiveObject {
     'minGapSmallMedium': minGapSmallMedium,
     'minGapMediumLarge': minGapMediumLarge,
     'multicolorSmallPriceCap': multicolorSmallPriceCap,
+    'multicolorSmallPriceMin': multicolorSmallPriceMin,
   };
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
@@ -95,6 +99,7 @@ class Category extends HiveObject {
     minGapSmallMedium: (json['minGapSmallMedium'] as num? ?? 0).toDouble(),
     minGapMediumLarge: (json['minGapMediumLarge'] as num? ?? 0).toDouble(),
     multicolorSmallPriceCap: (json['multicolorSmallPriceCap'] as num? ?? 0).toDouble(),
+    multicolorSmallPriceMin: (json['multicolorSmallPriceMin'] as num? ?? 0).toDouble(),
   );
 }
 
@@ -292,13 +297,14 @@ class CategoryAdapter extends TypeAdapter<Category> {
       minGapSmallMedium: fields.containsKey(11) ? fields[11] as double : 0,
       minGapMediumLarge: fields.containsKey(12) ? fields[12] as double : 0,
       multicolorSmallPriceCap: fields.containsKey(13) ? fields[13] as double : 0,
+      multicolorSmallPriceMin: fields.containsKey(14) ? fields[14] as double : 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Category obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -326,7 +332,9 @@ class CategoryAdapter extends TypeAdapter<Category> {
       ..writeByte(12)
       ..write(obj.minGapMediumLarge)
       ..writeByte(13)
-      ..write(obj.multicolorSmallPriceCap);
+      ..write(obj.multicolorSmallPriceCap)
+      ..writeByte(14)
+      ..write(obj.multicolorSmallPriceMin);
   }
 }
 
@@ -2731,6 +2739,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       'minGapSmallMedium': TextEditingController(text: widget.category.minGapSmallMedium.toString()),
       'minGapMediumLarge': TextEditingController(text: widget.category.minGapMediumLarge.toString()),
       'multicolorSmallPriceCap': TextEditingController(text: widget.category.multicolorSmallPriceCap.toString()),
+      'multicolorSmallPriceMin': TextEditingController(text: widget.category.multicolorSmallPriceMin.toString()),
     };
   }
 
@@ -2758,6 +2767,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         minGapSmallMedium: double.parse(_controllers['minGapSmallMedium']!.text),
         minGapMediumLarge: double.parse(_controllers['minGapMediumLarge']!.text),
         multicolorSmallPriceCap: double.parse(_controllers['multicolorSmallPriceCap']!.text),
+        multicolorSmallPriceMin: double.parse(_controllers['multicolorSmallPriceMin']!.text),
       );
       
       context.read<DataBloc>().add(UpdateCategory(updatedCategory));
@@ -2958,6 +2968,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                     const SizedBox(height: 16),
                     _buildTextField('smallPriceCap', 'Small Size Price Cap (\$)'),
                     _buildTextField('multicolorSmallPriceCap', 'Multicolor Small Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceMin', 'Multicolor Small Price Min (\$)'),
                     _buildTextField('minGapSmallMedium', 'Min Gap: Small ↔ Medium (\$)'),
                     _buildTextField('minGapMediumLarge', 'Min Gap: Medium ↔ Large (\$)'),
                   ],
@@ -3338,6 +3349,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
           newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceCap;
           newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceCap;
+        }
+      }
+
+      // Apply multicolor small price minimum (only for multicolor small)
+      if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceMin > 0) {
+        final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
+        if (mcSmallPrice < category.multicolorSmallPriceMin) {
+          // Store price before min adjustment for display
+          if (newResults['Multicolor Small']!['originalPrice'] == null) {
+            newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
+          }
+          newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceMin;
+          newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceMin;
         }
       }
 
