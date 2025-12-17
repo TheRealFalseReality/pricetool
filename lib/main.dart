@@ -3038,10 +3038,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   
   late String _selectedCategoryId;
   Map<String, Map<String, double?>> _pricingResult = {};
-  
-  // Expansion state for collapsible sections
-  bool _isVariationsExpanded = true;
-  bool _isMulticolorExpanded = true;
 
   bool get _isEditing => widget.product != null;
 
@@ -3548,12 +3544,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             const SizedBox(height: 16),
             Card(
               child: ExpansionTile(
-                initiallyExpanded: _isVariationsExpanded,
-                onExpansionChanged: (expanded) {
-                  setState(() {
-                    _isVariationsExpanded = expanded;
-                  });
-                },
+                initiallyExpanded: true,
                 leading: Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
                 title: Text(
                   'Product Variations',
@@ -3588,12 +3579,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             const SizedBox(height: 16),
             Card(
               child: ExpansionTile(
-                initiallyExpanded: _isMulticolorExpanded,
-                onExpansionChanged: (expanded) {
-                  setState(() {
-                    _isMulticolorExpanded = expanded;
-                  });
-                },
+                initiallyExpanded: true,
                 leading: Icon(Icons.palette, color: Theme.of(context).colorScheme.secondary),
                 title: Text(
                   'Multicolor Variations (Optional)',
