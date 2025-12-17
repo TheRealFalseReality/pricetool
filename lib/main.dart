@@ -835,7 +835,7 @@ class _HomePageState extends State<HomePage> {
   void _showAddSaleDialog(BuildContext context, Product product) {
     final priceController = TextEditingController();
     
-    // Calculate average price from variations
+    // Calculate average price from variations (including multicolor)
     double avgPrice = 0;
     int count = 0;
     if (product.smallVariation.etsyPrice > 0) {
@@ -848,6 +848,19 @@ class _HomePageState extends State<HomePage> {
     }
     if (product.largeVariation.etsyPrice > 0) {
       avgPrice += product.largeVariation.etsyPrice;
+      count++;
+    }
+    // Include multicolor variations in average
+    if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
+      avgPrice += product.smallMulticolorVariation!.etsyPrice;
+      count++;
+    }
+    if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
+      avgPrice += product.mediumMulticolorVariation!.etsyPrice;
+      count++;
+    }
+    if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
+      avgPrice += product.largeMulticolorVariation!.etsyPrice;
       count++;
     }
     if (count > 0) {
@@ -1219,6 +1232,26 @@ class StatisticsPage extends StatelessWidget {
       if (product.largeVariation.etsyPrice > 0) {
         productTotalRevenue += product.largeVariation.etsyPrice;
         productTotalProfit += product.largeVariation.profit;
+        variationCount++;
+        productVariations++;
+      }
+      
+      // Include multicolor variations in statistics
+      if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
+        productTotalRevenue += product.smallMulticolorVariation!.etsyPrice;
+        productTotalProfit += product.smallMulticolorVariation!.profit;
+        variationCount++;
+        productVariations++;
+      }
+      if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
+        productTotalRevenue += product.mediumMulticolorVariation!.etsyPrice;
+        productTotalProfit += product.mediumMulticolorVariation!.profit;
+        variationCount++;
+        productVariations++;
+      }
+      if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
+        productTotalRevenue += product.largeMulticolorVariation!.etsyPrice;
+        productTotalProfit += product.largeMulticolorVariation!.profit;
         variationCount++;
         productVariations++;
       }
