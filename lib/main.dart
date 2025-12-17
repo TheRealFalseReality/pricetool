@@ -3544,7 +3544,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             const SizedBox(height: 16),
             Card(
               child: ExpansionTile(
-                initiallyExpanded: true,
+                initiallyExpanded: false,
                 leading: Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
                 title: Text(
                   'Product Variations',
@@ -3579,7 +3579,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             const SizedBox(height: 16),
             Card(
               child: ExpansionTile(
-                initiallyExpanded: true,
+                initiallyExpanded: false,
                 leading: Icon(Icons.palette, color: Theme.of(context).colorScheme.secondary),
                 title: Text(
                   'Multicolor Variations (Optional)',
