@@ -3038,6 +3038,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   
   late String _selectedCategoryId;
   Map<String, Map<String, double?>> _pricingResult = {};
+  
+  // Expansion state for collapsible sections
+  bool _isVariationsExpanded = true;
+  bool _isMulticolorExpanded = true;
 
   bool get _isEditing => widget.product != null;
 
@@ -3543,23 +3547,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                 ),
             const SizedBox(height: 16),
             Card(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Product Variations',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+              child: ExpansionTile(
+                initiallyExpanded: _isVariationsExpanded,
+                onExpansionChanged: (expanded) {
+                  setState(() {
+                    _isVariationsExpanded = expanded;
+                  });
+                },
+                leading: Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
+                title: Text(
+                  'Product Variations',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
+                children: [
                   TabBar(
                     controller: _tabController,
                     labelColor: Theme.of(context).colorScheme.primary,
@@ -3585,23 +3587,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             ),
             const SizedBox(height: 16),
             Card(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        Icon(Icons.palette, color: Theme.of(context).colorScheme.secondary),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Multicolor Variations (Optional)',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+              child: ExpansionTile(
+                initiallyExpanded: _isMulticolorExpanded,
+                onExpansionChanged: (expanded) {
+                  setState(() {
+                    _isMulticolorExpanded = expanded;
+                  });
+                },
+                leading: Icon(Icons.palette, color: Theme.of(context).colorScheme.secondary),
+                title: Text(
+                  'Multicolor Variations (Optional)',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
+                children: [
                   TabBar(
                     controller: _multicolorTabController,
                     labelColor: Theme.of(context).colorScheme.secondary,
