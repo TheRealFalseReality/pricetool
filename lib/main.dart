@@ -42,6 +42,10 @@ class Category extends HiveObject {
   late double minGapSmallMedium;
   @HiveField(12)
   late double minGapMediumLarge;
+  @HiveField(13)
+  late double multicolorSmallPriceCap;
+  @HiveField(14)
+  late double multicolorSmallPriceMin;
 
   Category({
     required this.id,
@@ -57,6 +61,8 @@ class Category extends HiveObject {
     this.smallPriceCap = 0,
     this.minGapSmallMedium = 0,
     this.minGapMediumLarge = 0,
+    this.multicolorSmallPriceCap = 0,
+    this.multicolorSmallPriceMin = 0,
   });
 
   // For JSON serialization
@@ -74,6 +80,8 @@ class Category extends HiveObject {
     'smallPriceCap': smallPriceCap,
     'minGapSmallMedium': minGapSmallMedium,
     'minGapMediumLarge': minGapMediumLarge,
+    'multicolorSmallPriceCap': multicolorSmallPriceCap,
+    'multicolorSmallPriceMin': multicolorSmallPriceMin,
   };
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
@@ -90,6 +98,8 @@ class Category extends HiveObject {
     smallPriceCap: (json['smallPriceCap'] as num? ?? 0).toDouble(),
     minGapSmallMedium: (json['minGapSmallMedium'] as num? ?? 0).toDouble(),
     minGapMediumLarge: (json['minGapMediumLarge'] as num? ?? 0).toDouble(),
+    multicolorSmallPriceCap: (json['multicolorSmallPriceCap'] as num? ?? 0).toDouble(),
+    multicolorSmallPriceMin: (json['multicolorSmallPriceMin'] as num? ?? 0).toDouble(),
   );
 }
 
@@ -105,6 +115,8 @@ class ProductVariation extends HiveObject {
   late double profit;
   @HiveField(4) // Field to store the original unadjusted price
   late double originalPrice;
+  @HiveField(5) // Number of models (used for multicolor batch pricing)
+  late int numberOfModels;
 
   ProductVariation({
     this.printTimeHours = 0.0,
@@ -112,6 +124,7 @@ class ProductVariation extends HiveObject {
     this.etsyPrice = 0.0,
     this.profit = 0.0,
     this.originalPrice = 0.0,
+    this.numberOfModels = 1,
   });
   
   // For JSON serialization
@@ -121,6 +134,7 @@ class ProductVariation extends HiveObject {
     'etsyPrice': etsyPrice,
     'profit': profit,
     'originalPrice': originalPrice,
+    'numberOfModels': numberOfModels,
   };
 
   factory ProductVariation.fromJson(Map<String, dynamic> json) => ProductVariation(
@@ -129,6 +143,7 @@ class ProductVariation extends HiveObject {
     etsyPrice: (json['etsyPrice'] as num? ?? 0.0).toDouble(), // Handle legacy data
     profit: (json['profit'] as num? ?? 0.0).toDouble(), // Handle legacy data
     originalPrice: (json['originalPrice'] as num? ?? 0.0).toDouble(), // Handle legacy data
+    numberOfModels: (json['numberOfModels'] as num? ?? 1).toInt(), // Handle legacy data
   );
 }
 
@@ -154,6 +169,12 @@ class Product extends HiveObject {
   late double totalRevenue;
   @HiveField(9)
   late String categoryId;
+  @HiveField(10)
+  ProductVariation? smallMulticolorVariation;
+  @HiveField(11)
+  ProductVariation? mediumMulticolorVariation;
+  @HiveField(12)
+  ProductVariation? largeMulticolorVariation;
 
   Product({
     required this.id,
@@ -166,6 +187,9 @@ class Product extends HiveObject {
     this.totalSales = 0,
     this.totalRevenue = 0.0,
     required this.categoryId,
+    this.smallMulticolorVariation,
+    this.mediumMulticolorVariation,
+    this.largeMulticolorVariation,
   });
 
   // For JSON serialization
@@ -180,6 +204,9 @@ class Product extends HiveObject {
     'totalSales': totalSales,
     'totalRevenue': totalRevenue,
     'categoryId': categoryId,
+    'smallMulticolorVariation': smallMulticolorVariation?.toJson(),
+    'mediumMulticolorVariation': mediumMulticolorVariation?.toJson(),
+    'largeMulticolorVariation': largeMulticolorVariation?.toJson(),
   };
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -193,6 +220,15 @@ class Product extends HiveObject {
     totalSales: (json['totalSales'] as num? ?? 0).toInt(),
     totalRevenue: (json['totalRevenue'] as num? ?? 0.0).toDouble(),
     categoryId: json['categoryId'] as String? ?? 'default_3d_models', // Default for backward compatibility
+    smallMulticolorVariation: json['smallMulticolorVariation'] != null 
+        ? ProductVariation.fromJson(json['smallMulticolorVariation'])
+        : null,
+    mediumMulticolorVariation: json['mediumMulticolorVariation'] != null 
+        ? ProductVariation.fromJson(json['mediumMulticolorVariation'])
+        : null,
+    largeMulticolorVariation: json['largeMulticolorVariation'] != null 
+        ? ProductVariation.fromJson(json['largeMulticolorVariation'])
+        : null,
   );
 }
 
@@ -260,13 +296,15 @@ class CategoryAdapter extends TypeAdapter<Category> {
       smallPriceCap: fields.containsKey(10) ? fields[10] as double : 0,
       minGapSmallMedium: fields.containsKey(11) ? fields[11] as double : 0,
       minGapMediumLarge: fields.containsKey(12) ? fields[12] as double : 0,
+      multicolorSmallPriceCap: fields.containsKey(13) ? fields[13] as double : 0,
+      multicolorSmallPriceMin: fields.containsKey(14) ? fields[14] as double : 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Category obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -292,7 +330,11 @@ class CategoryAdapter extends TypeAdapter<Category> {
       ..writeByte(11)
       ..write(obj.minGapSmallMedium)
       ..writeByte(12)
-      ..write(obj.minGapMediumLarge);
+      ..write(obj.minGapMediumLarge)
+      ..writeByte(13)
+      ..write(obj.multicolorSmallPriceCap)
+      ..writeByte(14)
+      ..write(obj.multicolorSmallPriceMin);
   }
 }
 
@@ -312,13 +354,14 @@ class ProductVariationAdapter extends TypeAdapter<ProductVariation> {
       etsyPrice: fields[2] as double,
       profit: fields.containsKey(3) ? fields[3] as double : 0.0, // Backwards compatible
       originalPrice: fields.containsKey(4) ? fields[4] as double : 0.0, // Backwards compatible
+      numberOfModels: fields.containsKey(5) ? fields[5] as int : 1, // Backwards compatible
     );
   }
 
   @override
   void write(BinaryWriter writer, ProductVariation obj) {
     writer
-      ..writeByte(5) // Total number of fields being serialized
+      ..writeByte(6) // Total number of fields being serialized
       ..writeByte(0)
       ..write(obj.printTimeHours)
       ..writeByte(1)
@@ -328,7 +371,9 @@ class ProductVariationAdapter extends TypeAdapter<ProductVariation> {
       ..writeByte(3)
       ..write(obj.profit)
       ..writeByte(4)
-      ..write(obj.originalPrice);
+      ..write(obj.originalPrice)
+      ..writeByte(5)
+      ..write(obj.numberOfModels);
   }
 }
 
@@ -353,13 +398,16 @@ class ProductAdapter extends TypeAdapter<Product> {
       totalSales: fields.containsKey(7) ? fields[7] as int : 0,
       totalRevenue: fields.containsKey(8) ? fields[8] as double : 0.0,
       categoryId: fields.containsKey(9) ? fields[9] as String : 'default_3d_models',
+      smallMulticolorVariation: fields.containsKey(10) ? fields[10] as ProductVariation? : null,
+      mediumMulticolorVariation: fields.containsKey(11) ? fields[11] as ProductVariation? : null,
+      largeMulticolorVariation: fields.containsKey(12) ? fields[12] as ProductVariation? : null,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -379,7 +427,13 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(8)
       ..write(obj.totalRevenue)
       ..writeByte(9)
-      ..write(obj.categoryId);
+      ..write(obj.categoryId)
+      ..writeByte(10)
+      ..write(obj.smallMulticolorVariation)
+      ..writeByte(11)
+      ..write(obj.mediumMulticolorVariation)
+      ..writeByte(12)
+      ..write(obj.largeMulticolorVariation);
   }
 }
 
@@ -776,8 +830,16 @@ class _HomePageState extends State<HomePage> {
     }
   }
   
+  void _addVariationToDisplay(List<String> parts, ProductVariation? variation, String label) {
+    if (variation != null && variation.etsyPrice > 0) {
+      parts.add('$label: \$${variation.etsyPrice.toStringAsFixed(0)}${variation.profit > 0 ? ' (\$${variation.profit.toStringAsFixed(2)})' : ''}');
+    }
+  }
+
   String _formatPrices(Product product) {
     final parts = <String>[];
+    
+    // Single-color variations with profit display
     if (product.smallVariation.etsyPrice > 0) {
       parts.add('S: \$${product.smallVariation.etsyPrice.toStringAsFixed(0)} (\$${product.smallVariation.profit.toStringAsFixed(2)})');
     }
@@ -787,29 +849,39 @@ class _HomePageState extends State<HomePage> {
     if (product.largeVariation.etsyPrice > 0) {
       parts.add('L: \$${product.largeVariation.etsyPrice.toStringAsFixed(0)} (\$${product.largeVariation.profit.toStringAsFixed(2)})');
     }
+    
+    // Add multicolor prices if they exist
+    _addVariationToDisplay(parts, product.smallMulticolorVariation, 'MC-S');
+    _addVariationToDisplay(parts, product.mediumMulticolorVariation, 'MC-M');
+    _addVariationToDisplay(parts, product.largeMulticolorVariation, 'MC-L');
+    
     return parts.join(' | ');
+  }
+
+  void _addVariationToAverage(ProductVariation? variation, List<double> prices) {
+    if (variation != null && variation.etsyPrice > 0) {
+      prices.add(variation.etsyPrice);
+    }
   }
 
   void _showAddSaleDialog(BuildContext context, Product product) {
     final priceController = TextEditingController();
     
-    // Calculate average price from variations
-    double avgPrice = 0;
-    int count = 0;
-    if (product.smallVariation.etsyPrice > 0) {
-      avgPrice += product.smallVariation.etsyPrice;
-      count++;
-    }
-    if (product.mediumVariation.etsyPrice > 0) {
-      avgPrice += product.mediumVariation.etsyPrice;
-      count++;
-    }
-    if (product.largeVariation.etsyPrice > 0) {
-      avgPrice += product.largeVariation.etsyPrice;
-      count++;
-    }
-    if (count > 0) {
-      avgPrice = avgPrice / count;
+    // Calculate average price from all variations (including multicolor)
+    final prices = <double>[];
+    
+    // Add single-color variations
+    if (product.smallVariation.etsyPrice > 0) prices.add(product.smallVariation.etsyPrice);
+    if (product.mediumVariation.etsyPrice > 0) prices.add(product.mediumVariation.etsyPrice);
+    if (product.largeVariation.etsyPrice > 0) prices.add(product.largeVariation.etsyPrice);
+    
+    // Add multicolor variations
+    _addVariationToAverage(product.smallMulticolorVariation, prices);
+    _addVariationToAverage(product.mediumMulticolorVariation, prices);
+    _addVariationToAverage(product.largeMulticolorVariation, prices);
+    
+    if (prices.isNotEmpty) {
+      final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
       priceController.text = avgPrice.toStringAsFixed(2);
     }
 
@@ -1126,6 +1198,13 @@ class _HomePageState extends State<HomePage> {
 class StatisticsPage extends StatelessWidget {
   const StatisticsPage({super.key});
 
+  void _addVariationToStats(ProductVariation? variation, 
+      {required double Function() onAdd}) {
+    if (variation != null && variation.etsyPrice > 0) {
+      onAdd();
+    }
+  }
+
   Map<String, dynamic> _calculateStatistics(DataState state) {
     if (state.products.isEmpty) {
       return {
@@ -1162,23 +1241,28 @@ class StatisticsPage extends StatelessWidget {
       totalSalesCount += product.totalSales;
       totalActualRevenue += product.totalRevenue;
 
-      if (product.smallVariation.etsyPrice > 0) {
-        productTotalRevenue += product.smallVariation.etsyPrice;
-        productTotalProfit += product.smallVariation.profit;
+      // Helper to add variation stats
+      void addVariation(ProductVariation variation) {
+        productTotalRevenue += variation.etsyPrice;
+        productTotalProfit += variation.profit;
         variationCount++;
         productVariations++;
       }
-      if (product.mediumVariation.etsyPrice > 0) {
-        productTotalRevenue += product.mediumVariation.etsyPrice;
-        productTotalProfit += product.mediumVariation.profit;
-        variationCount++;
-        productVariations++;
+
+      // Process single-color variations
+      if (product.smallVariation.etsyPrice > 0) addVariation(product.smallVariation);
+      if (product.mediumVariation.etsyPrice > 0) addVariation(product.mediumVariation);
+      if (product.largeVariation.etsyPrice > 0) addVariation(product.largeVariation);
+      
+      // Process multicolor variations
+      if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
+        addVariation(product.smallMulticolorVariation!);
       }
-      if (product.largeVariation.etsyPrice > 0) {
-        productTotalRevenue += product.largeVariation.etsyPrice;
-        productTotalProfit += product.largeVariation.profit;
-        variationCount++;
-        productVariations++;
+      if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
+        addVariation(product.mediumMulticolorVariation!);
+      }
+      if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
+        addVariation(product.largeMulticolorVariation!);
       }
 
       if (productVariations > 0) {
@@ -2654,6 +2738,8 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       'smallPriceCap': TextEditingController(text: widget.category.smallPriceCap.toString()),
       'minGapSmallMedium': TextEditingController(text: widget.category.minGapSmallMedium.toString()),
       'minGapMediumLarge': TextEditingController(text: widget.category.minGapMediumLarge.toString()),
+      'multicolorSmallPriceCap': TextEditingController(text: widget.category.multicolorSmallPriceCap.toString()),
+      'multicolorSmallPriceMin': TextEditingController(text: widget.category.multicolorSmallPriceMin.toString()),
     };
   }
 
@@ -2680,6 +2766,8 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         smallPriceCap: double.parse(_controllers['smallPriceCap']!.text),
         minGapSmallMedium: double.parse(_controllers['minGapSmallMedium']!.text),
         minGapMediumLarge: double.parse(_controllers['minGapMediumLarge']!.text),
+        multicolorSmallPriceCap: double.parse(_controllers['multicolorSmallPriceCap']!.text),
+        multicolorSmallPriceMin: double.parse(_controllers['multicolorSmallPriceMin']!.text),
       );
       
       context.read<DataBloc>().add(UpdateCategory(updatedCategory));
@@ -2879,6 +2967,8 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                     ),
                     const SizedBox(height: 16),
                     _buildTextField('smallPriceCap', 'Small Size Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceCap', 'Multicolor Small Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceMin', 'Multicolor Small Price Min (\$)'),
                     _buildTextField('minGapSmallMedium', 'Min Gap: Small ↔ Medium (\$)'),
                     _buildTextField('minGapMediumLarge', 'Min Gap: Medium ↔ Large (\$)'),
                   ],
@@ -2934,11 +3024,17 @@ class ProductDetailPage extends StatefulWidget {
 class _ProductDetailPageState extends State<ProductDetailPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   late TabController _tabController;
+  late TabController _multicolorTabController;
   
   late TextEditingController _nameController, _imageUrlController, _listingUrlController;
   late TextEditingController _sTimeController, _sGramController;
   late TextEditingController _mTimeController, _mGramController;
   late TextEditingController _lTimeController, _lGramController;
+  
+  // Multicolor variation controllers
+  late TextEditingController _sMcTimeController, _sMcGramController, _sMcModelsController;
+  late TextEditingController _mMcTimeController, _mMcGramController, _mMcModelsController;
+  late TextEditingController _lMcTimeController, _lMcGramController, _lMcModelsController;
   
   late String _selectedCategoryId;
   Map<String, Map<String, double?>> _pricingResult = {};
@@ -2949,6 +3045,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _multicolorTabController = TabController(length: 3, vsync: this);
     
     _nameController = TextEditingController(text: widget.product?.name ?? '');
     _imageUrlController = TextEditingController(text: widget.product?.imageUrl ?? '');
@@ -2960,6 +3057,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     _mGramController = TextEditingController(text: widget.product?.mediumVariation.filamentGrams.toString() ?? '0');
     _lTimeController = TextEditingController(text: widget.product?.largeVariation.printTimeHours.toString() ?? '0');
     _lGramController = TextEditingController(text: widget.product?.largeVariation.filamentGrams.toString() ?? '0');
+
+    // Multicolor variation controllers
+    _sMcTimeController = TextEditingController(text: widget.product?.smallMulticolorVariation?.printTimeHours.toString() ?? '0');
+    _sMcGramController = TextEditingController(text: widget.product?.smallMulticolorVariation?.filamentGrams.toString() ?? '0');
+    _sMcModelsController = TextEditingController(text: widget.product?.smallMulticolorVariation?.numberOfModels.toString() ?? '1');
+    _mMcTimeController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.printTimeHours.toString() ?? '0');
+    _mMcGramController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.filamentGrams.toString() ?? '0');
+    _mMcModelsController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.numberOfModels.toString() ?? '1');
+    _lMcTimeController = TextEditingController(text: widget.product?.largeMulticolorVariation?.printTimeHours.toString() ?? '0');
+    _lMcGramController = TextEditingController(text: widget.product?.largeMulticolorVariation?.filamentGrams.toString() ?? '0');
+    _lMcModelsController = TextEditingController(text: widget.product?.largeMulticolorVariation?.numberOfModels.toString() ?? '1');
 
     // Set initial category
     final categories = context.read<DataBloc>().state.categories;
@@ -2974,6 +3082,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   @override
   void dispose() {
     _tabController.dispose();
+    _multicolorTabController.dispose();
     _nameController.dispose();
     _imageUrlController.dispose();
     _listingUrlController.dispose();
@@ -2983,6 +3092,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     _mGramController.dispose();
     _lTimeController.dispose();
     _lGramController.dispose();
+    _sMcTimeController.dispose();
+    _sMcGramController.dispose();
+    _sMcModelsController.dispose();
+    _mMcTimeController.dispose();
+    _mMcGramController.dispose();
+    _mMcModelsController.dispose();
+    _lMcTimeController.dispose();
+    _lMcGramController.dispose();
+    _lMcModelsController.dispose();
     super.dispose();
   }
   
@@ -2996,6 +3114,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         'Medium': product.mediumVariation,
         'Large': product.largeVariation,
       };
+
+      // Add multicolor variations if they exist
+      if (product.smallMulticolorVariation != null) {
+        variations['Multicolor Small'] = product.smallMulticolorVariation!;
+      }
+      if (product.mediumMulticolorVariation != null) {
+        variations['Multicolor Medium'] = product.mediumMulticolorVariation!;
+      }
+      if (product.largeMulticolorVariation != null) {
+        variations['Multicolor Large'] = product.largeMulticolorVariation!;
+      }
 
       Map<String, Map<String, double?>> newResults = {};
       
@@ -3073,12 +3202,31 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         'Medium': {'time': double.tryParse(_mTimeController.text) ?? 0, 'grams': double.tryParse(_mGramController.text) ?? 0},
         'Large': {'time': double.tryParse(_lTimeController.text) ?? 0, 'grams': double.tryParse(_lGramController.text) ?? 0},
       };
+      
+      // Multicolor variations data with number of models
+      final multicolorVariationsData = {
+        'Multicolor Small': {
+          'time': double.tryParse(_sMcTimeController.text) ?? 0, 
+          'grams': double.tryParse(_sMcGramController.text) ?? 0,
+          'models': int.tryParse(_sMcModelsController.text) ?? 1,
+        },
+        'Multicolor Medium': {
+          'time': double.tryParse(_mMcTimeController.text) ?? 0, 
+          'grams': double.tryParse(_mMcGramController.text) ?? 0,
+          'models': int.tryParse(_mMcModelsController.text) ?? 1,
+        },
+        'Multicolor Large': {
+          'time': double.tryParse(_lMcTimeController.text) ?? 0, 
+          'grams': double.tryParse(_lMcGramController.text) ?? 0,
+          'models': int.tryParse(_lMcModelsController.text) ?? 1,
+        },
+      };
 
       Map<String, Map<String, double?>> newResults = {};
       final newVariations = <String, ProductVariation>{};
       
-      // First pass: calculate all prices with avoidance zone
-      variationsData.forEach((key, value) {
+      // Helper function to calculate price for a single-color variation
+      void calculateVariationPrice(String key, Map<String, double> value) {
         final printTime = value['time']!;
         final filamentGrams = value['grams']!;
         double calculatedPrice = 0;
@@ -3116,11 +3264,72 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           filamentGrams: filamentGrams, 
           etsyPrice: calculatedPrice,
           profit: profitAmount,
-          originalPrice: originalPriceValue
+          originalPrice: originalPriceValue,
+          numberOfModels: 1,
         );
-      });
+      }
+      
+      // Helper function to calculate price for a multicolor variation (with batch pricing)
+      void calculateMulticolorVariationPrice(String key, Map<String, dynamic> value) {
+        final printTime = value['time'] as double;
+        final filamentGrams = value['grams'] as double;
+        final numberOfModels = value['models'] as int;
+        double calculatedPrice = 0;
+        double profitAmount = 0;
+        double originalPriceValue = 0;
+        double totalPrice = 0;
+        
+        if (printTime > 0 && filamentGrams > 0 && numberOfModels > 0) {
+            final filamentCostPerGram = category.filamentCostPerKg / 1000;
+            final calculatedFilamentCost = filamentGrams * filamentCostPerGram;
+            final calculatedElectricityCost = printTime * settings.electricityCostKwh;
+            
+            final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + category.laborCost + category.licenseFee;
+            profitAmount = totalProductionCost * (category.profitMargin / 100);
+            final targetAmount = totalProductionCost + profitAmount + category.shippingCost;
+            final etsyPrice = (targetAmount + settings.etsyListingFee) / (1 - (settings.etsyFeesPercent / 100));
+            
+            // Apply even rounding first
+            double roundedPrice = _roundToNearestEven(etsyPrice);
+            
+            // Then apply avoidance zone with threshold (priority)
+            totalPrice = _applyAvoidanceZone(roundedPrice, category.avoidanceZoneMin, category.avoidanceZoneMax, category.avoidanceZoneThreshold);
+            
+            // Calculate individual price by dividing by number of models
+            double individualPriceRaw = totalPrice / numberOfModels;
+            
+            // Round individual price to nearest even whole number
+            calculatedPrice = _roundToNearestEven(individualPriceRaw);
+            
+            // Store the price after avoidance zone as the original (before cap/gap adjustments)
+            originalPriceValue = calculatedPrice;
 
-      // Second pass: apply small price cap
+            newResults[key] = {
+              'totalProductionCost': totalProductionCost,
+              'etsyPrice': calculatedPrice,  // Individual price (rounded)
+              'profit': profitAmount / numberOfModels,  // Individual profit
+              'originalPrice': null,
+              'totalPrice': totalPrice,  // Store total for display
+              'numberOfModels': numberOfModels.toDouble(),
+              'totalCost': totalProductionCost,  // Total cost for display
+              'totalProfit': profitAmount,  // Total profit for display
+            };
+        }
+        newVariations[key] = ProductVariation(
+          printTimeHours: printTime, 
+          filamentGrams: filamentGrams, 
+          etsyPrice: calculatedPrice,
+          profit: profitAmount / (numberOfModels > 0 ? numberOfModels : 1),
+          originalPrice: originalPriceValue,
+          numberOfModels: numberOfModels,
+        );
+      }
+      
+      // First pass: calculate all prices with avoidance zone
+      variationsData.forEach(calculateVariationPrice);
+      multicolorVariationsData.forEach(calculateMulticolorVariationPrice);
+
+      // Second pass: apply small price cap (only for single-color small)
       if (newResults.containsKey('Small') && category.smallPriceCap > 0) {
         final smallPrice = newResults['Small']!['etsyPrice']!;
         if (smallPrice > category.smallPriceCap) {
@@ -3129,6 +3338,30 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           newResults['Small']!['etsyPrice'] = category.smallPriceCap;
           newVariations['Small']!.etsyPrice = category.smallPriceCap;
           // Note: ProductVariation.originalPrice already contains the pre-cap price
+        }
+      }
+
+      // Apply multicolor small price cap (only for multicolor small)
+      if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceCap > 0) {
+        final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
+        if (mcSmallPrice > category.multicolorSmallPriceCap) {
+          // Store price before cap for display
+          newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
+          newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceCap;
+          newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceCap;
+        }
+      }
+
+      // Apply multicolor small price minimum (only for multicolor small)
+      if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceMin > 0) {
+        final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
+        if (mcSmallPrice < category.multicolorSmallPriceMin) {
+          // Store price before min adjustment for display
+          if (newResults['Multicolor Small']!['originalPrice'] == null) {
+            newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
+          }
+          newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceMin;
+          newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceMin;
         }
       }
 
@@ -3191,6 +3424,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         mediumVariation: newVariations['Medium']!,
         largeVariation: newVariations['Large']!,
         categoryId: _selectedCategoryId,
+        smallMulticolorVariation: newVariations['Multicolor Small'],
+        mediumMulticolorVariation: newVariations['Multicolor Medium'],
+        largeMulticolorVariation: newVariations['Multicolor Large'],
       );
       
       if (_isEditing) {
@@ -3347,6 +3583,48 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.palette, color: Theme.of(context).colorScheme.secondary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Multicolor Variations (Optional)',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TabBar(
+                    controller: _multicolorTabController,
+                    labelColor: Theme.of(context).colorScheme.secondary,
+                    tabs: const [
+                      Tab(text: 'MC Small'),
+                      Tab(text: 'MC Medium'),
+                      Tab(text: 'MC Large'),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 220,
+                    child: TabBarView(
+                      controller: _multicolorTabController,
+                      children: [
+                        _buildMulticolorVariationTab(_sMcTimeController, _sMcGramController, _sMcModelsController),
+                        _buildMulticolorVariationTab(_mMcTimeController, _mMcGramController, _mMcModelsController),
+                        _buildMulticolorVariationTab(_lMcTimeController, _lMcGramController, _lMcModelsController),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 20),
             SizedBox(
               height: 54,
@@ -3379,6 +3657,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             _buildTextField(timeController, 'Print Time (hours)'),
             const SizedBox(height: 12),
             _buildTextField(gramController, 'Filament Used (grams)'),
+          ],
+        ),
+      );
+  }
+
+  Widget _buildMulticolorVariationTab(TextEditingController timeController, TextEditingController gramController, TextEditingController modelsController) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        child: Column(
+          children: [
+            _buildTextField(timeController, 'Total Print Time (hours)'),
+            const SizedBox(height: 8),
+            _buildTextField(gramController, 'Total Filament Used (grams)'),
+            const SizedBox(height: 8),
+            _buildTextField(modelsController, 'Number of Models Printed'),
           ],
         ),
       );
@@ -3443,7 +3736,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                           entry.value['profit']!,
                           entry.value['etsyPrice']!,
                           entry.value['suggestedPrice'],
-                          entry.value['originalPrice']
+                          entry.value['originalPrice'],
+                          entry.value['totalPrice'],
+                          entry.value['numberOfModels'],
+                          entry.value['totalCost'],
+                          entry.value['totalProfit'],
                       );
                     }).toList(),
                 ],
@@ -3460,14 +3757,19 @@ class _ResultRow extends StatelessWidget {
   final double price;
   final double? suggestedPrice;
   final double? originalPrice;
+  final double? totalPrice;
+  final double? numberOfModels;
+  final double? totalCost;
+  final double? totalProfit;
 
-  const _ResultRow(this.label, this.cost, this.profit, this.price, this.suggestedPrice, this.originalPrice);
+  const _ResultRow(this.label, this.cost, this.profit, this.price, this.suggestedPrice, this.originalPrice, this.totalPrice, this.numberOfModels, this.totalCost, this.totalProfit);
 
   @override
   Widget build(BuildContext context) {
     final salePrice15 = price * 0.85;
     final salePrice25 = price * 0.75;
     final wasAdjusted = originalPrice != null && originalPrice! > 0 && originalPrice! != price;
+    final isMulticolor = totalPrice != null && numberOfModels != null && numberOfModels! > 0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -3476,17 +3778,60 @@ class _ResultRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           SizedBox(width: 50, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))),
-          SizedBox(width: 60, child: Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center)),
-          SizedBox(width: 60, child: Text('\$${profit.toStringAsFixed(2)}', style: const TextStyle(color: Colors.greenAccent), textAlign: TextAlign.center)),
+          SizedBox(
+            width: 60,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (isMulticolor && totalCost != null) ...[
+                  Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
+                  Text('(Total: \$${totalCost!.toStringAsFixed(2)})', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                ] else ...[
+                  Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 60,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (isMulticolor && totalProfit != null) ...[
+                  Text('\$${profit.toStringAsFixed(2)}', style: const TextStyle(color: Colors.greenAccent, fontSize: 12), textAlign: TextAlign.center),
+                  Text('(Total: \$${totalProfit!.toStringAsFixed(2)})', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                ] else ...[
+                  Text('\$${profit.toStringAsFixed(2)}', style: const TextStyle(color: Colors.greenAccent), textAlign: TextAlign.center),
+                ],
+              ],
+            ),
+          ),
           SizedBox(
             width: 80,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '\$${price.toStringAsFixed(0)}',
-                  style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold),
-                ),
+                if (isMulticolor) ...[
+                  Text(
+                    '\$${price.toStringAsFixed(0)} each',
+                    style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '(${numberOfModels!.toInt()} models)',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Total: \$${totalPrice!.toStringAsFixed(0)}',
+                    style: TextStyle(fontSize: 11, color: Colors.amber[300]),
+                  ),
+                ] else ...[
+                  Text(
+                    '\$${price.toStringAsFixed(0)}',
+                    style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold),
+                  ),
+                ],
                 if (wasAdjusted) ...[
                   const SizedBox(height: 2),
                   Text(
@@ -3494,7 +3839,7 @@ class _ResultRow extends StatelessWidget {
                     style: TextStyle(fontSize: 10, color: Colors.amber[300], fontStyle: FontStyle.italic),
                   ),
                 ],
-                if (price > 0) ...[
+                if (price > 0 && !isMulticolor) ...[
                   const SizedBox(height: 4),
                   Text(
                     '15%: \$${salePrice15.toStringAsFixed(2)}',
