@@ -42,6 +42,8 @@ class Category extends HiveObject {
   late double minGapSmallMedium;
   @HiveField(12)
   late double minGapMediumLarge;
+  @HiveField(13)
+  late double multicolorSmallPriceCap;
 
   Category({
     required this.id,
@@ -57,6 +59,7 @@ class Category extends HiveObject {
     this.smallPriceCap = 0,
     this.minGapSmallMedium = 0,
     this.minGapMediumLarge = 0,
+    this.multicolorSmallPriceCap = 0,
   });
 
   // For JSON serialization
@@ -74,6 +77,7 @@ class Category extends HiveObject {
     'smallPriceCap': smallPriceCap,
     'minGapSmallMedium': minGapSmallMedium,
     'minGapMediumLarge': minGapMediumLarge,
+    'multicolorSmallPriceCap': multicolorSmallPriceCap,
   };
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
@@ -90,6 +94,7 @@ class Category extends HiveObject {
     smallPriceCap: (json['smallPriceCap'] as num? ?? 0).toDouble(),
     minGapSmallMedium: (json['minGapSmallMedium'] as num? ?? 0).toDouble(),
     minGapMediumLarge: (json['minGapMediumLarge'] as num? ?? 0).toDouble(),
+    multicolorSmallPriceCap: (json['multicolorSmallPriceCap'] as num? ?? 0).toDouble(),
   );
 }
 
@@ -286,13 +291,14 @@ class CategoryAdapter extends TypeAdapter<Category> {
       smallPriceCap: fields.containsKey(10) ? fields[10] as double : 0,
       minGapSmallMedium: fields.containsKey(11) ? fields[11] as double : 0,
       minGapMediumLarge: fields.containsKey(12) ? fields[12] as double : 0,
+      multicolorSmallPriceCap: fields.containsKey(13) ? fields[13] as double : 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Category obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -318,7 +324,9 @@ class CategoryAdapter extends TypeAdapter<Category> {
       ..writeByte(11)
       ..write(obj.minGapSmallMedium)
       ..writeByte(12)
-      ..write(obj.minGapMediumLarge);
+      ..write(obj.minGapMediumLarge)
+      ..writeByte(13)
+      ..write(obj.multicolorSmallPriceCap);
   }
 }
 
@@ -2722,6 +2730,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       'smallPriceCap': TextEditingController(text: widget.category.smallPriceCap.toString()),
       'minGapSmallMedium': TextEditingController(text: widget.category.minGapSmallMedium.toString()),
       'minGapMediumLarge': TextEditingController(text: widget.category.minGapMediumLarge.toString()),
+      'multicolorSmallPriceCap': TextEditingController(text: widget.category.multicolorSmallPriceCap.toString()),
     };
   }
 
@@ -2748,6 +2757,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         smallPriceCap: double.parse(_controllers['smallPriceCap']!.text),
         minGapSmallMedium: double.parse(_controllers['minGapSmallMedium']!.text),
         minGapMediumLarge: double.parse(_controllers['minGapMediumLarge']!.text),
+        multicolorSmallPriceCap: double.parse(_controllers['multicolorSmallPriceCap']!.text),
       );
       
       context.read<DataBloc>().add(UpdateCategory(updatedCategory));
@@ -2947,6 +2957,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                     ),
                     const SizedBox(height: 16),
                     _buildTextField('smallPriceCap', 'Small Size Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceCap', 'Multicolor Small Price Cap (\$)'),
                     _buildTextField('minGapSmallMedium', 'Min Gap: Small ↔ Medium (\$)'),
                     _buildTextField('minGapMediumLarge', 'Min Gap: Medium ↔ Large (\$)'),
                   ],
@@ -3274,18 +3285,23 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             totalPrice = _applyAvoidanceZone(roundedPrice, category.avoidanceZoneMin, category.avoidanceZoneMax, category.avoidanceZoneThreshold);
             
             // Calculate individual price by dividing by number of models
-            calculatedPrice = totalPrice / numberOfModels;
+            double individualPriceRaw = totalPrice / numberOfModels;
+            
+            // Round individual price to nearest even whole number
+            calculatedPrice = _roundToNearestEven(individualPriceRaw);
             
             // Store the price after avoidance zone as the original (before cap/gap adjustments)
             originalPriceValue = calculatedPrice;
 
             newResults[key] = {
               'totalProductionCost': totalProductionCost,
-              'etsyPrice': calculatedPrice,  // Individual price
+              'etsyPrice': calculatedPrice,  // Individual price (rounded)
               'profit': profitAmount / numberOfModels,  // Individual profit
               'originalPrice': null,
               'totalPrice': totalPrice,  // Store total for display
               'numberOfModels': numberOfModels.toDouble(),
+              'totalCost': totalProductionCost,  // Total cost for display
+              'totalProfit': profitAmount,  // Total profit for display
             };
         }
         newVariations[key] = ProductVariation(
@@ -3311,6 +3327,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           newResults['Small']!['etsyPrice'] = category.smallPriceCap;
           newVariations['Small']!.etsyPrice = category.smallPriceCap;
           // Note: ProductVariation.originalPrice already contains the pre-cap price
+        }
+      }
+
+      // Apply multicolor small price cap (only for multicolor small)
+      if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceCap > 0) {
+        final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
+        if (mcSmallPrice > category.multicolorSmallPriceCap) {
+          // Store price before cap for display
+          newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
+          newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceCap;
+          newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceCap;
         }
       }
 
@@ -3688,6 +3715,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                           entry.value['originalPrice'],
                           entry.value['totalPrice'],
                           entry.value['numberOfModels'],
+                          entry.value['totalCost'],
+                          entry.value['totalProfit'],
                       );
                     }).toList(),
                 ],
@@ -3706,8 +3735,10 @@ class _ResultRow extends StatelessWidget {
   final double? originalPrice;
   final double? totalPrice;
   final double? numberOfModels;
+  final double? totalCost;
+  final double? totalProfit;
 
-  const _ResultRow(this.label, this.cost, this.profit, this.price, this.suggestedPrice, this.originalPrice, this.totalPrice, this.numberOfModels);
+  const _ResultRow(this.label, this.cost, this.profit, this.price, this.suggestedPrice, this.originalPrice, this.totalPrice, this.numberOfModels, this.totalCost, this.totalProfit);
 
   @override
   Widget build(BuildContext context) {
@@ -3723,8 +3754,34 @@ class _ResultRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           SizedBox(width: 50, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))),
-          SizedBox(width: 60, child: Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center)),
-          SizedBox(width: 60, child: Text('\$${profit.toStringAsFixed(2)}', style: const TextStyle(color: Colors.greenAccent), textAlign: TextAlign.center)),
+          SizedBox(
+            width: 60,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (isMulticolor && totalCost != null) ...[
+                  Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
+                  Text('(Total: \$${totalCost!.toStringAsFixed(2)})', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                ] else ...[
+                  Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 60,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (isMulticolor && totalProfit != null) ...[
+                  Text('\$${profit.toStringAsFixed(2)}', style: const TextStyle(color: Colors.greenAccent, fontSize: 12), textAlign: TextAlign.center),
+                  Text('(Total: \$${totalProfit!.toStringAsFixed(2)})', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                ] else ...[
+                  Text('\$${profit.toStringAsFixed(2)}', style: const TextStyle(color: Colors.greenAccent), textAlign: TextAlign.center),
+                ],
+              ],
+            ),
+          ),
           SizedBox(
             width: 80,
             child: Column(
@@ -3732,7 +3789,7 @@ class _ResultRow extends StatelessWidget {
               children: [
                 if (isMulticolor) ...[
                   Text(
-                    '\$${price.toStringAsFixed(2)} each',
+                    '\$${price.toStringAsFixed(0)} each',
                     style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 2),
