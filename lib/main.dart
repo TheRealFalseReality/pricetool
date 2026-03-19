@@ -46,6 +46,12 @@ class Category extends HiveObject {
   late double multicolorSmallPriceCap;
   @HiveField(14)
   late double multicolorSmallPriceMin;
+  @HiveField(15)
+  List<String>? variationSizeNames;
+
+  /// The ordered list of size names for this category.
+  /// Defaults to ['Small', 'Medium', 'Large'] if not set.
+  List<String> get effectiveSizeNames => variationSizeNames ?? ['Small', 'Medium', 'Large'];
 
   Category({
     required this.id,
@@ -63,6 +69,7 @@ class Category extends HiveObject {
     this.minGapMediumLarge = 0,
     this.multicolorSmallPriceCap = 0,
     this.multicolorSmallPriceMin = 0,
+    this.variationSizeNames,
   });
 
   // For JSON serialization
@@ -82,6 +89,7 @@ class Category extends HiveObject {
     'minGapMediumLarge': minGapMediumLarge,
     'multicolorSmallPriceCap': multicolorSmallPriceCap,
     'multicolorSmallPriceMin': multicolorSmallPriceMin,
+    'variationSizeNames': variationSizeNames,
   };
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
@@ -100,6 +108,9 @@ class Category extends HiveObject {
     minGapMediumLarge: (json['minGapMediumLarge'] as num? ?? 0).toDouble(),
     multicolorSmallPriceCap: (json['multicolorSmallPriceCap'] as num? ?? 0).toDouble(),
     multicolorSmallPriceMin: (json['multicolorSmallPriceMin'] as num? ?? 0).toDouble(),
+    variationSizeNames: json['variationSizeNames'] != null
+        ? (json['variationSizeNames'] as List).cast<String>()
+        : null,
   );
 }
 
@@ -175,6 +186,10 @@ class Product extends HiveObject {
   ProductVariation? mediumMulticolorVariation;
   @HiveField(12)
   ProductVariation? largeMulticolorVariation;
+  @HiveField(13)
+  List<ProductVariation>? additionalVariations;
+  @HiveField(14)
+  List<String>? additionalVariationNames;
 
   Product({
     required this.id,
@@ -190,6 +205,8 @@ class Product extends HiveObject {
     this.smallMulticolorVariation,
     this.mediumMulticolorVariation,
     this.largeMulticolorVariation,
+    this.additionalVariations,
+    this.additionalVariationNames,
   });
 
   // For JSON serialization
@@ -207,6 +224,8 @@ class Product extends HiveObject {
     'smallMulticolorVariation': smallMulticolorVariation?.toJson(),
     'mediumMulticolorVariation': mediumMulticolorVariation?.toJson(),
     'largeMulticolorVariation': largeMulticolorVariation?.toJson(),
+    'additionalVariations': additionalVariations?.map((v) => v.toJson()).toList(),
+    'additionalVariationNames': additionalVariationNames,
   };
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -228,6 +247,12 @@ class Product extends HiveObject {
         : null,
     largeMulticolorVariation: json['largeMulticolorVariation'] != null 
         ? ProductVariation.fromJson(json['largeMulticolorVariation'])
+        : null,
+    additionalVariations: json['additionalVariations'] != null
+        ? (json['additionalVariations'] as List).map((v) => ProductVariation.fromJson(v as Map<String, dynamic>)).toList()
+        : null,
+    additionalVariationNames: json['additionalVariationNames'] != null
+        ? (json['additionalVariationNames'] as List).cast<String>()
         : null,
   );
 }
@@ -298,13 +323,14 @@ class CategoryAdapter extends TypeAdapter<Category> {
       minGapMediumLarge: fields.containsKey(12) ? fields[12] as double : 0,
       multicolorSmallPriceCap: fields.containsKey(13) ? fields[13] as double : 0,
       multicolorSmallPriceMin: fields.containsKey(14) ? fields[14] as double : 0,
+      variationSizeNames: fields.containsKey(15) ? (fields[15] as List?)?.cast<String>() : null,
     );
   }
 
   @override
   void write(BinaryWriter writer, Category obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -334,7 +360,9 @@ class CategoryAdapter extends TypeAdapter<Category> {
       ..writeByte(13)
       ..write(obj.multicolorSmallPriceCap)
       ..writeByte(14)
-      ..write(obj.multicolorSmallPriceMin);
+      ..write(obj.multicolorSmallPriceMin)
+      ..writeByte(15)
+      ..write(obj.variationSizeNames);
   }
 }
 
@@ -401,13 +429,15 @@ class ProductAdapter extends TypeAdapter<Product> {
       smallMulticolorVariation: fields.containsKey(10) ? fields[10] as ProductVariation? : null,
       mediumMulticolorVariation: fields.containsKey(11) ? fields[11] as ProductVariation? : null,
       largeMulticolorVariation: fields.containsKey(12) ? fields[12] as ProductVariation? : null,
+      additionalVariations: fields.containsKey(13) ? (fields[13] as List?)?.cast<ProductVariation>() : null,
+      additionalVariationNames: fields.containsKey(14) ? (fields[14] as List?)?.cast<String>() : null,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -433,7 +463,11 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(11)
       ..write(obj.mediumMulticolorVariation)
       ..writeByte(12)
-      ..write(obj.largeMulticolorVariation);
+      ..write(obj.largeMulticolorVariation)
+      ..writeByte(13)
+      ..write(obj.additionalVariations)
+      ..writeByte(14)
+      ..write(obj.additionalVariationNames);
   }
 }
 
@@ -1013,15 +1047,26 @@ class _HomePageState extends State<HomePage> {
   String _formatPrices(Product product) {
     final parts = <String>[];
     
-    // Single-color variations with profit display
-    if (product.smallVariation.etsyPrice > 0) {
-      parts.add('S: \$${product.smallVariation.etsyPrice.toStringAsFixed(0)} (\$${product.smallVariation.profit.toStringAsFixed(2)})');
-    }
-    if (product.mediumVariation.etsyPrice > 0) {
-      parts.add('M: \$${product.mediumVariation.etsyPrice.toStringAsFixed(0)} (\$${product.mediumVariation.profit.toStringAsFixed(2)})');
-    }
-    if (product.largeVariation.etsyPrice > 0) {
-      parts.add('L: \$${product.largeVariation.etsyPrice.toStringAsFixed(0)} (\$${product.largeVariation.profit.toStringAsFixed(2)})');
+    // Use dynamic variations if available (new-style, set by category-driven sizing)
+    if (product.additionalVariations != null &&
+        product.additionalVariationNames != null &&
+        product.additionalVariations!.isNotEmpty) {
+      final names = product.additionalVariationNames!;
+      final vars = product.additionalVariations!;
+      for (int i = 0; i < names.length && i < vars.length; i++) {
+        _addVariationToDisplay(parts, vars[i], names[i]);
+      }
+    } else {
+      // Legacy: fixed small/medium/large display
+      if (product.smallVariation.etsyPrice > 0) {
+        parts.add('S: \$${product.smallVariation.etsyPrice.toStringAsFixed(0)} (\$${product.smallVariation.profit.toStringAsFixed(2)})');
+      }
+      if (product.mediumVariation.etsyPrice > 0) {
+        parts.add('M: \$${product.mediumVariation.etsyPrice.toStringAsFixed(0)} (\$${product.mediumVariation.profit.toStringAsFixed(2)})');
+      }
+      if (product.largeVariation.etsyPrice > 0) {
+        parts.add('L: \$${product.largeVariation.etsyPrice.toStringAsFixed(0)} (\$${product.largeVariation.profit.toStringAsFixed(2)})');
+      }
     }
     
     // Add multicolor prices if they exist
@@ -1044,10 +1089,16 @@ class _HomePageState extends State<HomePage> {
     // Calculate average price from all variations (including multicolor)
     final prices = <double>[];
     
-    // Add single-color variations
-    if (product.smallVariation.etsyPrice > 0) prices.add(product.smallVariation.etsyPrice);
-    if (product.mediumVariation.etsyPrice > 0) prices.add(product.mediumVariation.etsyPrice);
-    if (product.largeVariation.etsyPrice > 0) prices.add(product.largeVariation.etsyPrice);
+    // Add single-color variations (prefer new-style dynamic; fall back to legacy)
+    if (product.additionalVariations != null && product.additionalVariations!.isNotEmpty) {
+      for (final v in product.additionalVariations!) {
+        _addVariationToAverage(v, prices);
+      }
+    } else {
+      if (product.smallVariation.etsyPrice > 0) prices.add(product.smallVariation.etsyPrice);
+      if (product.mediumVariation.etsyPrice > 0) prices.add(product.mediumVariation.etsyPrice);
+      if (product.largeVariation.etsyPrice > 0) prices.add(product.largeVariation.etsyPrice);
+    }
     
     // Add multicolor variations
     _addVariationToAverage(product.smallMulticolorVariation, prices);
@@ -1423,10 +1474,16 @@ class StatisticsPage extends StatelessWidget {
         productVariations++;
       }
 
-      // Process single-color variations
-      if (product.smallVariation.etsyPrice > 0) addVariation(product.smallVariation);
-      if (product.mediumVariation.etsyPrice > 0) addVariation(product.mediumVariation);
-      if (product.largeVariation.etsyPrice > 0) addVariation(product.largeVariation);
+      // Process single-color variations (prefer new-style dynamic; fall back to legacy)
+      if (product.additionalVariations != null && product.additionalVariations!.isNotEmpty) {
+        for (final variation in product.additionalVariations!) {
+          if (variation.etsyPrice > 0) addVariation(variation);
+        }
+      } else {
+        if (product.smallVariation.etsyPrice > 0) addVariation(product.smallVariation);
+        if (product.mediumVariation.etsyPrice > 0) addVariation(product.mediumVariation);
+        if (product.largeVariation.etsyPrice > 0) addVariation(product.largeVariation);
+      }
       
       // Process multicolor variations
       if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
@@ -2136,24 +2193,45 @@ class ProfitMarginAnalyzer extends StatelessWidget {
     List<Map<String, dynamic>> analysis = [];
     
     for (var product in products) {
-      final variations = [
-        {'size': 'Small', 'variation': product.smallVariation},
-        {'size': 'Medium', 'variation': product.mediumVariation},
-        {'size': 'Large', 'variation': product.largeVariation},
-      ];
-      
-      for (var v in variations) {
-        final variation = v['variation'] as ProductVariation;
-        if (variation.etsyPrice > 0) {
-          final marginPercent = (variation.profit / variation.etsyPrice) * 100;
-          analysis.add({
-            'product': product,
-            'size': v['size'],
-            'price': variation.etsyPrice,
-            'profit': variation.profit,
-            'marginPercent': marginPercent,
-            'cost': variation.etsyPrice - variation.profit,
-          });
+      // Use dynamic variations if available; fall back to legacy S/M/L
+      if (product.additionalVariations != null &&
+          product.additionalVariationNames != null &&
+          product.additionalVariations!.isNotEmpty) {
+        final names = product.additionalVariationNames!;
+        final vars = product.additionalVariations!;
+        for (int i = 0; i < vars.length && i < names.length; i++) {
+          final variation = vars[i];
+          if (variation.etsyPrice > 0) {
+            final marginPercent = (variation.profit / variation.etsyPrice) * 100;
+            analysis.add({
+              'product': product,
+              'size': names[i],
+              'price': variation.etsyPrice,
+              'profit': variation.profit,
+              'marginPercent': marginPercent,
+              'cost': variation.etsyPrice - variation.profit,
+            });
+          }
+        }
+      } else {
+        final legacyVariations = [
+          {'size': 'Small', 'variation': product.smallVariation},
+          {'size': 'Medium', 'variation': product.mediumVariation},
+          {'size': 'Large', 'variation': product.largeVariation},
+        ];
+        for (var v in legacyVariations) {
+          final variation = v['variation'] as ProductVariation;
+          if (variation.etsyPrice > 0) {
+            final marginPercent = (variation.profit / variation.etsyPrice) * 100;
+            analysis.add({
+              'product': product,
+              'size': v['size'],
+              'price': variation.etsyPrice,
+              'profit': variation.profit,
+              'marginPercent': marginPercent,
+              'cost': variation.etsyPrice - variation.profit,
+            });
+          }
         }
       }
     }
@@ -2895,6 +2973,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late Map<String, TextEditingController> _controllers;
+  final List<TextEditingController> _sizeNameControllers = [];
 
   @override
   void initState() {
@@ -2915,17 +2994,26 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       'multicolorSmallPriceCap': TextEditingController(text: widget.category.multicolorSmallPriceCap.toString()),
       'multicolorSmallPriceMin': TextEditingController(text: widget.category.multicolorSmallPriceMin.toString()),
     };
+    for (final name in widget.category.effectiveSizeNames) {
+      _sizeNameControllers.add(TextEditingController(text: name));
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _controllers.values.forEach((controller) => controller.dispose());
+    for (final c in _sizeNameControllers) c.dispose();
     super.dispose();
   }
 
   void _saveCategory() {
     if (_formKey.currentState!.validate()) {
+      final sizeNames = _sizeNameControllers
+          .map((c) => c.text.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+
       final updatedCategory = Category(
         id: widget.category.id,
         name: _nameController.text.trim(),
@@ -2942,6 +3030,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         minGapMediumLarge: double.parse(_controllers['minGapMediumLarge']!.text),
         multicolorSmallPriceCap: double.parse(_controllers['multicolorSmallPriceCap']!.text),
         multicolorSmallPriceMin: double.parse(_controllers['multicolorSmallPriceMin']!.text),
+        variationSizeNames: sizeNames.isNotEmpty ? sizeNames : null,
       );
       
       context.read<DataBloc>().add(UpdateCategory(updatedCategory));
@@ -3092,6 +3181,111 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                   children: [
                     Row(
                       children: [
+                        Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Product Sizes',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Define the available sizes for products in this category. Drag to reorder. All sizes are optional per product.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_sizeNameControllers.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          'No sizes defined. Tap "Add Size" to add one.',
+                          style: TextStyle(color: Colors.grey[500], fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                    if (_sizeNameControllers.isNotEmpty)
+                      ReorderableListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        onReorder: (oldIndex, newIndex) {
+                          setState(() {
+                            if (newIndex > oldIndex) newIndex--;
+                            final ctrl = _sizeNameControllers.removeAt(oldIndex);
+                            _sizeNameControllers.insert(newIndex, ctrl);
+                          });
+                        },
+                        itemCount: _sizeNameControllers.length,
+                        itemBuilder: (context, index) {
+                          return Row(
+                            key: ValueKey('size_$index'),
+                            children: [
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                  child: Icon(Icons.drag_handle, color: Colors.grey),
+                                ),
+                              ),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: TextFormField(
+                                    controller: _sizeNameControllers[index],
+                                    decoration: InputDecoration(
+                                      labelText: 'Size ${index + 1} Name',
+                                      border: const OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.trim().isEmpty) {
+                                        return 'Size name cannot be empty';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () {
+                                  setState(() {
+                                    _sizeNameControllers[index].dispose();
+                                    _sizeNameControllers.removeAt(index);
+                                  });
+                                },
+                                tooltip: 'Remove size',
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Size'),
+                      onPressed: () {
+                        setState(() {
+                          _sizeNameControllers.add(TextEditingController(
+                            text: 'Size ${_sizeNameControllers.length + 1}',
+                          ));
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
                         Icon(Icons.price_check, color: Theme.of(context).colorScheme.primary),
                         const SizedBox(width: 12),
                         Text(
@@ -3140,11 +3334,11 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                       style: TextStyle(fontSize: 13, color: Colors.grey[400]),
                     ),
                     const SizedBox(height: 16),
-                    _buildTextField('smallPriceCap', 'Small Size Price Cap (\$)'),
-                    _buildTextField('multicolorSmallPriceCap', 'Multicolor Small Price Cap (\$)'),
-                    _buildTextField('multicolorSmallPriceMin', 'Multicolor Small Price Min (\$)'),
-                    _buildTextField('minGapSmallMedium', 'Min Gap: Small ↔ Medium (\$)'),
-                    _buildTextField('minGapMediumLarge', 'Min Gap: Medium ↔ Large (\$)'),
+                    _buildTextField('smallPriceCap', 'First Size Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceCap', 'Multicolor First Size Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceMin', 'Multicolor First Size Price Min (\$)'),
+                    _buildTextField('minGapSmallMedium', 'Min Gap: 1st ↔ 2nd Size (\$)'),
+                    _buildTextField('minGapMediumLarge', 'Min Gap: 2nd ↔ 3rd Size (\$)'),
                   ],
                 ),
               ),
@@ -3197,13 +3391,15 @@ class ProductDetailPage extends StatefulWidget {
 
 class _ProductDetailPageState extends State<ProductDetailPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  late TabController _tabController;
+  TabController? _tabController;
   late TabController _multicolorTabController;
   
   late TextEditingController _nameController, _imageUrlController, _listingUrlController;
-  late TextEditingController _sTimeController, _sGramController;
-  late TextEditingController _mTimeController, _mGramController;
-  late TextEditingController _lTimeController, _lGramController;
+
+  // Dynamic size controllers — indexed to match _currentSizeNames
+  final List<TextEditingController> _sizeTimeControllers = [];
+  final List<TextEditingController> _sizeGramControllers = [];
+  List<String> _currentSizeNames = [];
   
   // Multicolor variation controllers
   late TextEditingController _sMcTimeController, _sMcGramController, _sMcModelsController;
@@ -3215,22 +3411,78 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
 
   bool get _isEditing => widget.product != null;
 
+  /// Builds a map from size name to existing ProductVariation, for pre-filling controllers.
+  /// Prefers the new-style dynamic variations; falls back to legacy S/M/L fields.
+  Map<String, ProductVariation> _buildExistingVariationMap() {
+    if (widget.product == null) return {};
+    final product = widget.product!;
+    if (product.additionalVariations != null &&
+        product.additionalVariationNames != null &&
+        product.additionalVariations!.isNotEmpty) {
+      final map = <String, ProductVariation>{};
+      final names = product.additionalVariationNames!;
+      final vars = product.additionalVariations!;
+      for (int i = 0; i < names.length && i < vars.length; i++) {
+        map[names[i]] = vars[i];
+      }
+      return map;
+    }
+    // Legacy fallback
+    return {
+      'Small': product.smallVariation,
+      'Medium': product.mediumVariation,
+      'Large': product.largeVariation,
+    };
+  }
+
+  /// (Re)initializes size controllers for the given category.
+  /// Safe to call from initState or during a setState call.
+  void _initializeSizeControllers(String categoryId) {
+    final state = context.read<DataBloc>().state;
+    if (state.categories.isEmpty) return;
+    final category = state.categories.firstWhere(
+      (c) => c.id == categoryId,
+      orElse: () => state.categories.first,
+    );
+    _currentSizeNames = category.effectiveSizeNames;
+
+    // Dispose previous controllers
+    for (final c in _sizeTimeControllers) c.dispose();
+    for (final c in _sizeGramControllers) c.dispose();
+    _sizeTimeControllers.clear();
+    _sizeGramControllers.clear();
+
+    // Rebuild tab controller with correct length
+    _tabController?.dispose();
+    _tabController = TabController(
+      length: _currentSizeNames.isEmpty ? 1 : _currentSizeNames.length,
+      vsync: this,
+    );
+
+    final existingMap = _buildExistingVariationMap();
+    for (final sizeName in _currentSizeNames) {
+      final existing = existingMap[sizeName];
+      _sizeTimeControllers.add(TextEditingController(
+        text: (existing != null && existing.printTimeHours > 0)
+            ? existing.printTimeHours.toString()
+            : '',
+      ));
+      _sizeGramControllers.add(TextEditingController(
+        text: (existing != null && existing.filamentGrams > 0)
+            ? existing.filamentGrams.toString()
+            : '',
+      ));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _multicolorTabController = TabController(length: 3, vsync: this);
     
     _nameController = TextEditingController(text: widget.product?.name ?? '');
     _imageUrlController = TextEditingController(text: widget.product?.imageUrl ?? '');
     _listingUrlController = TextEditingController(text: widget.product?.listingUrl ?? '');
-
-    _sTimeController = TextEditingController(text: widget.product?.smallVariation.printTimeHours.toString() ?? '0');
-    _sGramController = TextEditingController(text: widget.product?.smallVariation.filamentGrams.toString() ?? '0');
-    _mTimeController = TextEditingController(text: widget.product?.mediumVariation.printTimeHours.toString() ?? '0');
-    _mGramController = TextEditingController(text: widget.product?.mediumVariation.filamentGrams.toString() ?? '0');
-    _lTimeController = TextEditingController(text: widget.product?.largeVariation.printTimeHours.toString() ?? '0');
-    _lGramController = TextEditingController(text: widget.product?.largeVariation.filamentGrams.toString() ?? '0');
 
     // Multicolor variation controllers
     _sMcTimeController = TextEditingController(text: widget.product?.smallMulticolorVariation?.printTimeHours.toString() ?? '0');
@@ -3243,9 +3495,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     _lMcGramController = TextEditingController(text: widget.product?.largeMulticolorVariation?.filamentGrams.toString() ?? '0');
     _lMcModelsController = TextEditingController(text: widget.product?.largeMulticolorVariation?.numberOfModels.toString() ?? '1');
 
-    // Set initial category
+    // Set initial category and initialize size controllers
     final categories = context.read<DataBloc>().state.categories;
     _selectedCategoryId = widget.product?.categoryId ?? (categories.isNotEmpty ? categories.first.id : 'default_3d_models');
+    _initializeSizeControllers(_selectedCategoryId);
 
     // If editing, show existing prices immediately
     if (_isEditing) {
@@ -3255,17 +3508,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     _multicolorTabController.dispose();
     _nameController.dispose();
     _imageUrlController.dispose();
     _listingUrlController.dispose();
-    _sTimeController.dispose();
-    _sGramController.dispose();
-    _mTimeController.dispose();
-    _mGramController.dispose();
-    _lTimeController.dispose();
-    _lGramController.dispose();
+    for (final c in _sizeTimeControllers) c.dispose();
+    for (final c in _sizeGramControllers) c.dispose();
     _sMcTimeController.dispose();
     _sMcGramController.dispose();
     _sMcModelsController.dispose();
@@ -3283,11 +3532,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       final settings = state.settings;
       final category = state.categories.firstWhere((c) => c.id == _selectedCategoryId, orElse: () => state.categories.first);
       final product = widget.product!;
-      final variations = {
-        'Small': product.smallVariation,
-        'Medium': product.mediumVariation,
-        'Large': product.largeVariation,
-      };
+
+      // Use dynamic variations map (prefers additionalVariations, falls back to legacy S/M/L)
+      final variations = Map<String, ProductVariation>.from(_buildExistingVariationMap());
 
       // Add multicolor variations if they exist
       if (product.smallMulticolorVariation != null) {
@@ -3371,11 +3618,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       final settings = state.settings;
       final category = state.categories.firstWhere((c) => c.id == _selectedCategoryId, orElse: () => state.categories.first);
       
-      final variationsData = {
-        'Small': {'time': double.tryParse(_sTimeController.text) ?? 0, 'grams': double.tryParse(_sGramController.text) ?? 0},
-        'Medium': {'time': double.tryParse(_mTimeController.text) ?? 0, 'grams': double.tryParse(_mGramController.text) ?? 0},
-        'Large': {'time': double.tryParse(_lTimeController.text) ?? 0, 'grams': double.tryParse(_lGramController.text) ?? 0},
-      };
+      // Build variationsData dynamically from category sizes
+      final variationsData = <String, Map<String, double>>{};
+      for (int i = 0; i < _currentSizeNames.length; i++) {
+        variationsData[_currentSizeNames[i]] = {
+          'time': double.tryParse(_sizeTimeControllers[i].text) ?? 0,
+          'grams': double.tryParse(_sizeGramControllers[i].text) ?? 0,
+        };
+      }
       
       // Multicolor variations data with number of models
       final multicolorVariationsData = {
@@ -3503,15 +3753,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       variationsData.forEach(calculateVariationPrice);
       multicolorVariationsData.forEach(calculateMulticolorVariationPrice);
 
-      // Second pass: apply small price cap (only for single-color small)
-      if (newResults.containsKey('Small') && category.smallPriceCap > 0) {
-        final smallPrice = newResults['Small']!['etsyPrice']!;
-        if (smallPrice > category.smallPriceCap) {
-          // Store price after avoidance zone (before cap) for display
-          newResults['Small']!['originalPrice'] = smallPrice;
-          newResults['Small']!['etsyPrice'] = category.smallPriceCap;
-          newVariations['Small']!.etsyPrice = category.smallPriceCap;
-          // Note: ProductVariation.originalPrice already contains the pre-cap price
+      // Second pass: apply 1st-size price cap
+      final firstName = _currentSizeNames.isNotEmpty ? _currentSizeNames[0] : null;
+      final secondName = _currentSizeNames.length > 1 ? _currentSizeNames[1] : null;
+      final thirdName = _currentSizeNames.length > 2 ? _currentSizeNames[2] : null;
+
+      if (firstName != null && newResults.containsKey(firstName) && category.smallPriceCap > 0) {
+        final firstPrice = newResults[firstName]!['etsyPrice']!;
+        if (firstPrice > category.smallPriceCap) {
+          newResults[firstName]!['originalPrice'] = firstPrice;
+          newResults[firstName]!['etsyPrice'] = category.smallPriceCap;
+          newVariations[firstName]!.etsyPrice = category.smallPriceCap;
         }
       }
 
@@ -3519,18 +3771,16 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceCap > 0) {
         final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
         if (mcSmallPrice > category.multicolorSmallPriceCap) {
-          // Store price before cap for display
           newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
           newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceCap;
           newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceCap;
         }
       }
 
-      // Apply multicolor small price minimum (only for multicolor small)
+      // Apply multicolor small price minimum
       if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceMin > 0) {
         final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
         if (mcSmallPrice < category.multicolorSmallPriceMin) {
-          // Store price before min adjustment for display
           if (newResults['Multicolor Small']!['originalPrice'] == null) {
             newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
           }
@@ -3539,47 +3789,35 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         }
       }
 
-      // Apply cascading gap adjustments - only increase prices, never decrease
+      // Apply cascading gap adjustments for 1st↔2nd and 2nd↔3rd sizes
       if (category.minGapSmallMedium > 0 || category.minGapMediumLarge > 0) {
-        final smallPrice = newResults['Small']?['etsyPrice'] ?? 0;
-        double mediumPrice = newResults['Medium']?['etsyPrice'] ?? 0;
-        // Get original price (after avoidance zone, before gap adjustments)
-        final mediumOriginalPrice = newVariations['Medium']?.originalPrice ?? 0;
-        double largePrice = newResults['Large']?['etsyPrice'] ?? 0;
-        // Get original price (after avoidance zone, before gap adjustments)
-        final largeOriginalPrice = newVariations['Large']?.originalPrice ?? 0;
+        final firstPrice = firstName != null ? (newResults[firstName]?['etsyPrice'] ?? 0) : 0.0;
+        double secondPrice = secondName != null ? (newResults[secondName]?['etsyPrice'] ?? 0) : 0.0;
+        final secondOriginalPrice = secondName != null ? (newVariations[secondName]?.originalPrice ?? 0) : 0.0;
+        double thirdPrice = thirdName != null ? (newResults[thirdName]?['etsyPrice'] ?? 0) : 0.0;
+        final thirdOriginalPrice = thirdName != null ? (newVariations[thirdName]?.originalPrice ?? 0) : 0.0;
 
-        // Check Small-Medium gap - only adjust if it increases the price above the original
-        if (smallPrice > 0 && mediumPrice > 0 && category.minGapSmallMedium > 0) {
-          final gapSM = mediumPrice - smallPrice;
-          if (gapSM < category.minGapSmallMedium) {
-            final adjustedMedium = smallPrice + category.minGapSmallMedium;
-            // Only apply if adjustment increases price above original unadjusted price
-            // Check mediumOriginalPrice > 0 to handle legacy data
-            if (mediumOriginalPrice > 0 && adjustedMedium > mediumOriginalPrice) {
-              newResults['Medium']!['originalPrice'] = mediumOriginalPrice; // Store original for display
-              newResults['Medium']!['etsyPrice'] = adjustedMedium;
-              newVariations['Medium']!.etsyPrice = adjustedMedium;
-              // Keep originalPrice as the unadjusted value
-              
-              // Use adjusted medium for cascading check
-              mediumPrice = adjustedMedium;
+        if (secondName != null && firstPrice > 0 && secondPrice > 0 && category.minGapSmallMedium > 0) {
+          final gap = secondPrice - firstPrice;
+          if (gap < category.minGapSmallMedium) {
+            final adjusted = firstPrice + category.minGapSmallMedium;
+            if (secondOriginalPrice > 0 && adjusted > secondOriginalPrice) {
+              newResults[secondName]!['originalPrice'] = secondOriginalPrice;
+              newResults[secondName]!['etsyPrice'] = adjusted;
+              newVariations[secondName]!.etsyPrice = adjusted;
+              secondPrice = adjusted;
             }
           }
         }
 
-        // Check Medium-Large gap (with cascading from Medium adjustment) - only adjust if it increases above original
-        if (mediumPrice > 0 && largePrice > 0 && category.minGapMediumLarge > 0) {
-          final gapML = largePrice - mediumPrice;
-          if (gapML < category.minGapMediumLarge) {
-            final adjustedLarge = mediumPrice + category.minGapMediumLarge;
-            // Only apply if adjustment increases price above original unadjusted price
-            // Check largeOriginalPrice > 0 to handle legacy data
-            if (largeOriginalPrice > 0 && adjustedLarge > largeOriginalPrice) {
-              newResults['Large']!['originalPrice'] = largeOriginalPrice; // Store original for display
-              newResults['Large']!['etsyPrice'] = adjustedLarge;
-              newVariations['Large']!.etsyPrice = adjustedLarge;
-              // Keep originalPrice as the unadjusted value
+        if (thirdName != null && secondPrice > 0 && thirdPrice > 0 && category.minGapMediumLarge > 0) {
+          final gap = thirdPrice - secondPrice;
+          if (gap < category.minGapMediumLarge) {
+            final adjusted = secondPrice + category.minGapMediumLarge;
+            if (thirdOriginalPrice > 0 && adjusted > thirdOriginalPrice) {
+              newResults[thirdName]!['originalPrice'] = thirdOriginalPrice;
+              newResults[thirdName]!['etsyPrice'] = adjusted;
+              newVariations[thirdName]!.etsyPrice = adjusted;
             }
           }
         }
@@ -3589,18 +3827,40 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
          _pricingResult = newResults;
       });
 
+      // Build dynamic variation lists from the current sizes
+      // Filter out sizes that have no user input (time and grams both zero/empty)
+      final savedNames = <String>[];
+      final savedVars = <ProductVariation>[];
+      for (final name in _currentSizeNames) {
+        final v = newVariations[name] ?? ProductVariation();
+        if (v.printTimeHours > 0 || v.filamentGrams > 0) {
+          savedNames.add(name);
+          savedVars.add(v);
+        }
+      }
+
+      // Map to legacy fields for backward compatibility (S/M/L by name, then by index)
+      final legacySmall = newVariations['Small'] ??
+          (savedVars.isNotEmpty ? savedVars[0] : ProductVariation());
+      final legacyMedium = newVariations['Medium'] ??
+          (savedVars.length > 1 ? savedVars[1] : ProductVariation());
+      final legacyLarge = newVariations['Large'] ??
+          (savedVars.length > 2 ? savedVars[2] : ProductVariation());
+
       final product = Product(
         id: _isEditing ? widget.product!.id : const Uuid().v4(),
         name: _nameController.text,
         imageUrl: _imageUrlController.text,
         listingUrl: _listingUrlController.text,
-        smallVariation: newVariations['Small']!,
-        mediumVariation: newVariations['Medium']!,
-        largeVariation: newVariations['Large']!,
+        smallVariation: legacySmall,
+        mediumVariation: legacyMedium,
+        largeVariation: legacyLarge,
         categoryId: _selectedCategoryId,
         smallMulticolorVariation: newVariations['Multicolor Small'],
         mediumMulticolorVariation: newVariations['Multicolor Medium'],
         largeMulticolorVariation: newVariations['Multicolor Large'],
+        additionalVariations: savedVars.isNotEmpty ? savedVars : null,
+        additionalVariationNames: savedNames.isNotEmpty ? savedNames : null,
       );
       
       if (_isEditing) {
@@ -3702,6 +3962,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                               if (value != null) {
                                 setState(() {
                                   _selectedCategoryId = value;
+                                  _initializeSizeControllers(value);
                                 });
                               }
                             },
@@ -3721,32 +3982,39 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                 initiallyExpanded: false,
                 leading: Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
                 title: Text(
-                  'Product Variations',
+                  'Product Sizes',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                subtitle: Text(
+                  'All sizes optional — leave blank to skip',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
                 children: [
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                    tabs: const [
-                      Tab(text: 'Small'),
-                      Tab(text: 'Medium'),
-                      Tab(text: 'Large'),
-                    ],
-                  ),
-                  SizedBox(
-                    height: 180,
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildVariationTab(_sTimeController, _sGramController),
-                        _buildVariationTab(_mTimeController, _mGramController),
-                        _buildVariationTab(_lTimeController, _lGramController),
-                      ],
+                  if (_currentSizeNames.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text('No sizes configured for this category. Edit the category to add sizes.'),
                     ),
-                  ),
+                  if (_currentSizeNames.isNotEmpty) ...[
+                    TabBar(
+                      controller: _tabController!,
+                      labelColor: Theme.of(context).colorScheme.primary,
+                      isScrollable: true,
+                      tabs: _currentSizeNames.map((name) => Tab(text: name)).toList(),
+                    ),
+                    SizedBox(
+                      height: 180,
+                      child: TabBarView(
+                        controller: _tabController!,
+                        children: List.generate(
+                          _currentSizeNames.length,
+                          (i) => _buildVariationTab(_sizeTimeControllers[i], _sizeGramControllers[i]),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -3814,9 +4082,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         padding: const EdgeInsets.symmetric(vertical: 16.0),
         child: Column(
           children: [
-            _buildTextField(timeController, 'Print Time (hours)'),
+            _buildTextField(timeController, 'Print Time (hours)', isRequired: false),
             const SizedBox(height: 12),
-            _buildTextField(gramController, 'Filament Used (grams)'),
+            _buildTextField(gramController, 'Filament Used (grams)', isRequired: false),
           ],
         ),
       );
@@ -3838,8 +4106,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   }
 
   Widget _buildTextField(TextEditingController controller, String label, {bool isRequired = true}) {
-    TextInputType keyboardType = (label.contains('URL') || label.contains('Name')) 
-        ? TextInputType.text 
+    TextInputType keyboardType = (label.contains('URL') || label.contains('Name'))
+        ? TextInputType.text
         : const TextInputType.numberWithOptions(decimal: true);
 
     return TextFormField(
@@ -3853,7 +4121,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           if (isRequired && (value == null || value.isEmpty)) {
             return 'This field is required';
           }
-          if (keyboardType != TextInputType.text && double.tryParse(value ?? '0') == null) {
+          if (keyboardType != TextInputType.text && value != null && value.isNotEmpty && double.tryParse(value) == null) {
             return 'Please enter a valid number';
           }
           return null;
