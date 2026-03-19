@@ -1069,11 +1069,6 @@ class _HomePageState extends State<HomePage> {
       }
     }
     
-    // Add multicolor prices if they exist
-    _addVariationToDisplay(parts, product.smallMulticolorVariation, 'MC-S');
-    _addVariationToDisplay(parts, product.mediumMulticolorVariation, 'MC-M');
-    _addVariationToDisplay(parts, product.largeMulticolorVariation, 'MC-L');
-    
     return parts.join(' | ');
   }
 
@@ -1099,11 +1094,6 @@ class _HomePageState extends State<HomePage> {
       if (product.mediumVariation.etsyPrice > 0) prices.add(product.mediumVariation.etsyPrice);
       if (product.largeVariation.etsyPrice > 0) prices.add(product.largeVariation.etsyPrice);
     }
-    
-    // Add multicolor variations
-    _addVariationToAverage(product.smallMulticolorVariation, prices);
-    _addVariationToAverage(product.mediumMulticolorVariation, prices);
-    _addVariationToAverage(product.largeMulticolorVariation, prices);
     
     if (prices.isNotEmpty) {
       final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
@@ -1483,17 +1473,6 @@ class StatisticsPage extends StatelessWidget {
         if (product.smallVariation.etsyPrice > 0) addVariation(product.smallVariation);
         if (product.mediumVariation.etsyPrice > 0) addVariation(product.mediumVariation);
         if (product.largeVariation.etsyPrice > 0) addVariation(product.largeVariation);
-      }
-      
-      // Process multicolor variations
-      if (product.smallMulticolorVariation?.etsyPrice != null && product.smallMulticolorVariation!.etsyPrice > 0) {
-        addVariation(product.smallMulticolorVariation!);
-      }
-      if (product.mediumMulticolorVariation?.etsyPrice != null && product.mediumMulticolorVariation!.etsyPrice > 0) {
-        addVariation(product.mediumMulticolorVariation!);
-      }
-      if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
-        addVariation(product.largeMulticolorVariation!);
       }
 
       if (productVariations > 0) {
@@ -2991,8 +2970,6 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       'smallPriceCap': TextEditingController(text: widget.category.smallPriceCap.toString()),
       'minGapSmallMedium': TextEditingController(text: widget.category.minGapSmallMedium.toString()),
       'minGapMediumLarge': TextEditingController(text: widget.category.minGapMediumLarge.toString()),
-      'multicolorSmallPriceCap': TextEditingController(text: widget.category.multicolorSmallPriceCap.toString()),
-      'multicolorSmallPriceMin': TextEditingController(text: widget.category.multicolorSmallPriceMin.toString()),
     };
     for (final name in widget.category.effectiveSizeNames) {
       _sizeNameControllers.add(TextEditingController(text: name));
@@ -3028,8 +3005,8 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         smallPriceCap: double.parse(_controllers['smallPriceCap']!.text),
         minGapSmallMedium: double.parse(_controllers['minGapSmallMedium']!.text),
         minGapMediumLarge: double.parse(_controllers['minGapMediumLarge']!.text),
-        multicolorSmallPriceCap: double.parse(_controllers['multicolorSmallPriceCap']!.text),
-        multicolorSmallPriceMin: double.parse(_controllers['multicolorSmallPriceMin']!.text),
+        multicolorSmallPriceCap: widget.category.multicolorSmallPriceCap,
+        multicolorSmallPriceMin: widget.category.multicolorSmallPriceMin,
         variationSizeNames: sizeNames.isNotEmpty ? sizeNames : null,
       );
       
@@ -3335,8 +3312,6 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                     ),
                     const SizedBox(height: 16),
                     _buildTextField('smallPriceCap', 'First Size Price Cap (\$)'),
-                    _buildTextField('multicolorSmallPriceCap', 'Multicolor First Size Price Cap (\$)'),
-                    _buildTextField('multicolorSmallPriceMin', 'Multicolor First Size Price Min (\$)'),
                     _buildTextField('minGapSmallMedium', 'Min Gap: 1st ↔ 2nd Size (\$)'),
                     _buildTextField('minGapMediumLarge', 'Min Gap: 2nd ↔ 3rd Size (\$)'),
                   ],
@@ -3392,7 +3367,6 @@ class ProductDetailPage extends StatefulWidget {
 class _ProductDetailPageState extends State<ProductDetailPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   TabController? _tabController;
-  late TabController _multicolorTabController;
   
   late TextEditingController _nameController, _imageUrlController, _listingUrlController;
 
@@ -3400,11 +3374,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   final List<TextEditingController> _sizeTimeControllers = [];
   final List<TextEditingController> _sizeGramControllers = [];
   List<String> _currentSizeNames = [];
-  
-  // Multicolor variation controllers
-  late TextEditingController _sMcTimeController, _sMcGramController, _sMcModelsController;
-  late TextEditingController _mMcTimeController, _mMcGramController, _mMcModelsController;
-  late TextEditingController _lMcTimeController, _lMcGramController, _lMcModelsController;
   
   late String _selectedCategoryId;
   Map<String, Map<String, double?>> _pricingResult = {};
@@ -3478,22 +3447,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   @override
   void initState() {
     super.initState();
-    _multicolorTabController = TabController(length: 3, vsync: this);
     
     _nameController = TextEditingController(text: widget.product?.name ?? '');
     _imageUrlController = TextEditingController(text: widget.product?.imageUrl ?? '');
     _listingUrlController = TextEditingController(text: widget.product?.listingUrl ?? '');
-
-    // Multicolor variation controllers
-    _sMcTimeController = TextEditingController(text: widget.product?.smallMulticolorVariation?.printTimeHours.toString() ?? '0');
-    _sMcGramController = TextEditingController(text: widget.product?.smallMulticolorVariation?.filamentGrams.toString() ?? '0');
-    _sMcModelsController = TextEditingController(text: widget.product?.smallMulticolorVariation?.numberOfModels.toString() ?? '1');
-    _mMcTimeController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.printTimeHours.toString() ?? '0');
-    _mMcGramController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.filamentGrams.toString() ?? '0');
-    _mMcModelsController = TextEditingController(text: widget.product?.mediumMulticolorVariation?.numberOfModels.toString() ?? '1');
-    _lMcTimeController = TextEditingController(text: widget.product?.largeMulticolorVariation?.printTimeHours.toString() ?? '0');
-    _lMcGramController = TextEditingController(text: widget.product?.largeMulticolorVariation?.filamentGrams.toString() ?? '0');
-    _lMcModelsController = TextEditingController(text: widget.product?.largeMulticolorVariation?.numberOfModels.toString() ?? '1');
 
     // Set initial category and initialize size controllers
     final categories = context.read<DataBloc>().state.categories;
@@ -3509,21 +3466,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   @override
   void dispose() {
     _tabController?.dispose();
-    _multicolorTabController.dispose();
     _nameController.dispose();
     _imageUrlController.dispose();
     _listingUrlController.dispose();
     for (final c in _sizeTimeControllers) c.dispose();
     for (final c in _sizeGramControllers) c.dispose();
-    _sMcTimeController.dispose();
-    _sMcGramController.dispose();
-    _sMcModelsController.dispose();
-    _mMcTimeController.dispose();
-    _mMcGramController.dispose();
-    _mMcModelsController.dispose();
-    _lMcTimeController.dispose();
-    _lMcGramController.dispose();
-    _lMcModelsController.dispose();
     super.dispose();
   }
   
@@ -3531,21 +3478,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       final state = context.read<DataBloc>().state;
       final settings = state.settings;
       final category = state.categories.firstWhere((c) => c.id == _selectedCategoryId, orElse: () => state.categories.first);
-      final product = widget.product!;
 
       // Use dynamic variations map (prefers additionalVariations, falls back to legacy S/M/L)
       final variations = Map<String, ProductVariation>.from(_buildExistingVariationMap());
-
-      // Add multicolor variations if they exist
-      if (product.smallMulticolorVariation != null) {
-        variations['Multicolor Small'] = product.smallMulticolorVariation!;
-      }
-      if (product.mediumMulticolorVariation != null) {
-        variations['Multicolor Medium'] = product.mediumMulticolorVariation!;
-      }
-      if (product.largeMulticolorVariation != null) {
-        variations['Multicolor Large'] = product.largeMulticolorVariation!;
-      }
 
       Map<String, Map<String, double?>> newResults = {};
       
@@ -3626,25 +3561,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           'grams': double.tryParse(_sizeGramControllers[i].text) ?? 0,
         };
       }
-      
-      // Multicolor variations data with number of models
-      final multicolorVariationsData = {
-        'Multicolor Small': {
-          'time': double.tryParse(_sMcTimeController.text) ?? 0, 
-          'grams': double.tryParse(_sMcGramController.text) ?? 0,
-          'models': int.tryParse(_sMcModelsController.text) ?? 1,
-        },
-        'Multicolor Medium': {
-          'time': double.tryParse(_mMcTimeController.text) ?? 0, 
-          'grams': double.tryParse(_mMcGramController.text) ?? 0,
-          'models': int.tryParse(_mMcModelsController.text) ?? 1,
-        },
-        'Multicolor Large': {
-          'time': double.tryParse(_lMcTimeController.text) ?? 0, 
-          'grams': double.tryParse(_lMcGramController.text) ?? 0,
-          'models': int.tryParse(_lMcModelsController.text) ?? 1,
-        },
-      };
 
       Map<String, Map<String, double?>> newResults = {};
       final newVariations = <String, ProductVariation>{};
@@ -3693,65 +3609,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         );
       }
       
-      // Helper function to calculate price for a multicolor variation (with batch pricing)
-      void calculateMulticolorVariationPrice(String key, Map<String, dynamic> value) {
-        final printTime = value['time'] as double;
-        final filamentGrams = value['grams'] as double;
-        final numberOfModels = value['models'] as int;
-        double calculatedPrice = 0;
-        double profitAmount = 0;
-        double originalPriceValue = 0;
-        double totalPrice = 0;
-        
-        if (printTime > 0 && filamentGrams > 0 && numberOfModels > 0) {
-            final filamentCostPerGram = category.filamentCostPerKg / 1000;
-            final calculatedFilamentCost = filamentGrams * filamentCostPerGram;
-            final calculatedElectricityCost = printTime * settings.electricityCostKwh;
-            
-            final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + category.laborCost + category.licenseFee;
-            profitAmount = totalProductionCost * (category.profitMargin / 100);
-            final targetAmount = totalProductionCost + profitAmount + category.shippingCost;
-            final etsyPrice = (targetAmount + settings.etsyListingFee) / (1 - (settings.etsyFeesPercent / 100));
-            
-            // Apply even rounding first
-            double roundedPrice = _roundToNearestEven(etsyPrice);
-            
-            // Then apply avoidance zone with threshold (priority)
-            totalPrice = _applyAvoidanceZone(roundedPrice, category.avoidanceZoneMin, category.avoidanceZoneMax, category.avoidanceZoneThreshold);
-            
-            // Calculate individual price by dividing by number of models
-            double individualPriceRaw = totalPrice / numberOfModels;
-            
-            // Round individual price to nearest even whole number
-            calculatedPrice = _roundToNearestEven(individualPriceRaw);
-            
-            // Store the price after avoidance zone as the original (before cap/gap adjustments)
-            originalPriceValue = calculatedPrice;
-
-            newResults[key] = {
-              'totalProductionCost': totalProductionCost,
-              'etsyPrice': calculatedPrice,  // Individual price (rounded)
-              'profit': profitAmount / numberOfModels,  // Individual profit
-              'originalPrice': null,
-              'totalPrice': totalPrice,  // Store total for display
-              'numberOfModels': numberOfModels.toDouble(),
-              'totalCost': totalProductionCost,  // Total cost for display
-              'totalProfit': profitAmount,  // Total profit for display
-            };
-        }
-        newVariations[key] = ProductVariation(
-          printTimeHours: printTime, 
-          filamentGrams: filamentGrams, 
-          etsyPrice: calculatedPrice,
-          profit: profitAmount / (numberOfModels > 0 ? numberOfModels : 1),
-          originalPrice: originalPriceValue,
-          numberOfModels: numberOfModels,
-        );
-      }
-      
       // First pass: calculate all prices with avoidance zone
       variationsData.forEach(calculateVariationPrice);
-      multicolorVariationsData.forEach(calculateMulticolorVariationPrice);
 
       // Second pass: apply 1st-size price cap
       final firstName = _currentSizeNames.isNotEmpty ? _currentSizeNames[0] : null;
@@ -3764,28 +3623,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           newResults[firstName]!['originalPrice'] = firstPrice;
           newResults[firstName]!['etsyPrice'] = category.smallPriceCap;
           newVariations[firstName]!.etsyPrice = category.smallPriceCap;
-        }
-      }
-
-      // Apply multicolor small price cap (only for multicolor small)
-      if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceCap > 0) {
-        final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
-        if (mcSmallPrice > category.multicolorSmallPriceCap) {
-          newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
-          newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceCap;
-          newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceCap;
-        }
-      }
-
-      // Apply multicolor small price minimum
-      if (newResults.containsKey('Multicolor Small') && category.multicolorSmallPriceMin > 0) {
-        final mcSmallPrice = newResults['Multicolor Small']!['etsyPrice']!;
-        if (mcSmallPrice < category.multicolorSmallPriceMin) {
-          if (newResults['Multicolor Small']!['originalPrice'] == null) {
-            newResults['Multicolor Small']!['originalPrice'] = mcSmallPrice;
-          }
-          newResults['Multicolor Small']!['etsyPrice'] = category.multicolorSmallPriceMin;
-          newVariations['Multicolor Small']!.etsyPrice = category.multicolorSmallPriceMin;
         }
       }
 
@@ -3856,9 +3693,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         mediumVariation: legacyMedium,
         largeVariation: legacyLarge,
         categoryId: _selectedCategoryId,
-        smallMulticolorVariation: newVariations['Multicolor Small'],
-        mediumMulticolorVariation: newVariations['Multicolor Medium'],
-        largeMulticolorVariation: newVariations['Multicolor Large'],
+        smallMulticolorVariation: widget.product?.smallMulticolorVariation,
+        mediumMulticolorVariation: widget.product?.mediumMulticolorVariation,
+        largeMulticolorVariation: widget.product?.largeMulticolorVariation,
         additionalVariations: savedVars.isNotEmpty ? savedVars : null,
         additionalVariationNames: savedNames.isNotEmpty ? savedNames : null,
       );
@@ -4018,41 +3855,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Card(
-              child: ExpansionTile(
-                initiallyExpanded: false,
-                leading: Icon(Icons.palette, color: Theme.of(context).colorScheme.secondary),
-                title: Text(
-                  'Multicolor Variations (Optional)',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                children: [
-                  TabBar(
-                    controller: _multicolorTabController,
-                    labelColor: Theme.of(context).colorScheme.secondary,
-                    tabs: const [
-                      Tab(text: 'MC Small'),
-                      Tab(text: 'MC Medium'),
-                      Tab(text: 'MC Large'),
-                    ],
-                  ),
-                  SizedBox(
-                    height: 220,
-                    child: TabBarView(
-                      controller: _multicolorTabController,
-                      children: [
-                        _buildMulticolorVariationTab(_sMcTimeController, _sMcGramController, _sMcModelsController),
-                        _buildMulticolorVariationTab(_mMcTimeController, _mMcGramController, _mMcModelsController),
-                        _buildMulticolorVariationTab(_lMcTimeController, _lMcGramController, _lMcModelsController),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 20),
             SizedBox(
               height: 54,
@@ -4085,21 +3887,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             _buildTextField(timeController, 'Print Time (hours)', isRequired: false),
             const SizedBox(height: 12),
             _buildTextField(gramController, 'Filament Used (grams)', isRequired: false),
-          ],
-        ),
-      );
-  }
-
-  Widget _buildMulticolorVariationTab(TextEditingController timeController, TextEditingController gramController, TextEditingController modelsController) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        child: Column(
-          children: [
-            _buildTextField(timeController, 'Total Print Time (hours)'),
-            const SizedBox(height: 8),
-            _buildTextField(gramController, 'Total Filament Used (grams)'),
-            const SizedBox(height: 8),
-            _buildTextField(modelsController, 'Number of Models Printed'),
           ],
         ),
       );
@@ -4255,8 +4042,8 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
       smallPriceCap: getVal(cat, 'smallPriceCap', cat.smallPriceCap),
       minGapSmallMedium: getVal(cat, 'minGapSmallMedium', cat.minGapSmallMedium),
       minGapMediumLarge: getVal(cat, 'minGapMediumLarge', cat.minGapMediumLarge),
-      multicolorSmallPriceCap: getVal(cat, 'multicolorSmallPriceCap', cat.multicolorSmallPriceCap),
-      multicolorSmallPriceMin: getVal(cat, 'multicolorSmallPriceMin', cat.multicolorSmallPriceMin),
+      multicolorSmallPriceCap: cat.multicolorSmallPriceCap,
+      multicolorSmallPriceMin: cat.multicolorSmallPriceMin,
     )).toList();
 
     context.read<DataBloc>().add(RecalculateAllPrices(
@@ -4472,10 +4259,6 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                       const SizedBox(width: 4),
                       _colHeader('Sm Cap \$', 82),
                       const SizedBox(width: 4),
-                      _colHeader('MC Cap \$', 82),
-                      const SizedBox(width: 4),
-                      _colHeader('MC Min \$', 82),
-                      const SizedBox(width: 4),
                       _colHeader('Gap S-M \$', 88),
                       const SizedBox(width: 4),
                       _colHeader('Gap M-L \$', 88),
@@ -4534,10 +4317,6 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                         const SizedBox(width: 4),
                         _catField(_catCtrl(cat.id, 'smallPriceCap', cat.smallPriceCap)),
                         const SizedBox(width: 4),
-                        _catField(_catCtrl(cat.id, 'multicolorSmallPriceCap', cat.multicolorSmallPriceCap)),
-                        const SizedBox(width: 4),
-                        _catField(_catCtrl(cat.id, 'multicolorSmallPriceMin', cat.multicolorSmallPriceMin)),
-                        const SizedBox(width: 4),
                         _catField(_catCtrl(cat.id, 'minGapSmallMedium', cat.minGapSmallMedium), width: 88),
                         const SizedBox(width: 4),
                         _catField(_catCtrl(cat.id, 'minGapMediumLarge', cat.minGapMediumLarge), width: 88),
@@ -4574,6 +4353,42 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
     }
 
     final catNames = {for (final c in state.categories) c.id: c.name};
+
+    // Collect all unique size names in order: from categories first, then products (for legacy)
+    final orderedSizeNames = <String>[];
+    for (final cat in state.categories) {
+      for (final name in cat.effectiveSizeNames) {
+        if (!orderedSizeNames.contains(name)) orderedSizeNames.add(name);
+      }
+    }
+    for (final product in state.products) {
+      final names = product.additionalVariationNames;
+      if (names != null && names.isNotEmpty) {
+        for (final name in names) {
+          if (!orderedSizeNames.contains(name)) orderedSizeNames.add(name);
+        }
+      }
+    }
+
+    // Helper: get size-name → variation map for a product
+    Map<String, ProductVariation> getProductVariationsBySize(Product product) {
+      if (product.additionalVariations != null &&
+          product.additionalVariationNames != null &&
+          product.additionalVariations!.isNotEmpty) {
+        final map = <String, ProductVariation>{};
+        final names = product.additionalVariationNames!;
+        final vars = product.additionalVariations!;
+        for (int i = 0; i < names.length && i < vars.length; i++) {
+          map[names[i]] = vars[i];
+        }
+        return map;
+      }
+      return {
+        'Small': product.smallVariation,
+        'Medium': product.mediumVariation,
+        'Large': product.largeVariation,
+      };
+    }
 
     String priceStr(double p) => p > 0 ? '\$${p.toStringAsFixed(0)}' : '–';
     String profitStr(double p) => p > 0 ? '\$${p.toStringAsFixed(2)}' : '–';
@@ -4614,24 +4429,20 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                   color: Colors.grey[300],
                 ),
                 dataTextStyle: const TextStyle(fontSize: 12),
-                columns: const [
-                  DataColumn(label: Text('Product')),
-                  DataColumn(label: Text('Category')),
-                  DataColumn(label: Text('S. Price'), numeric: true),
-                  DataColumn(label: Text('S. Profit'), numeric: true),
-                  DataColumn(label: Text('M. Price'), numeric: true),
-                  DataColumn(label: Text('M. Profit'), numeric: true),
-                  DataColumn(label: Text('L. Price'), numeric: true),
-                  DataColumn(label: Text('L. Profit'), numeric: true),
-                  DataColumn(label: Text('MC-S'), numeric: true),
-                  DataColumn(label: Text('MC-M'), numeric: true),
-                  DataColumn(label: Text('MC-L'), numeric: true),
-                  DataColumn(label: Text('Sales'), numeric: true),
-                  DataColumn(label: Text('Revenue'), numeric: true),
+                columns: [
+                  const DataColumn(label: Text('Product')),
+                  const DataColumn(label: Text('Category')),
+                  for (final sizeName in orderedSizeNames) ...[
+                    DataColumn(label: Text('$sizeName Price'), numeric: true),
+                    DataColumn(label: Text('$sizeName Profit'), numeric: true),
+                  ],
+                  const DataColumn(label: Text('Sales'), numeric: true),
+                  const DataColumn(label: Text('Revenue'), numeric: true),
                 ],
                 rows: state.products.map((product) {
                   final catName = catNames[product.categoryId] ?? '–';
                   final primary = Theme.of(context).colorScheme.secondary;
+                  final varMap = getProductVariationsBySize(product);
 
                   DataCell priceCell(double price) => DataCell(Text(
                     priceStr(price),
@@ -4667,15 +4478,10 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                         width: 100,
                         child: Text(catName, overflow: TextOverflow.ellipsis),
                       )),
-                      priceCell(product.smallVariation.etsyPrice),
-                      profitCell(product.smallVariation.profit),
-                      priceCell(product.mediumVariation.etsyPrice),
-                      profitCell(product.mediumVariation.profit),
-                      priceCell(product.largeVariation.etsyPrice),
-                      profitCell(product.largeVariation.profit),
-                      priceCell(product.smallMulticolorVariation?.etsyPrice ?? 0),
-                      priceCell(product.mediumMulticolorVariation?.etsyPrice ?? 0),
-                      priceCell(product.largeMulticolorVariation?.etsyPrice ?? 0),
+                      for (final sizeName in orderedSizeNames) ...[
+                        priceCell(varMap[sizeName]?.etsyPrice ?? 0),
+                        profitCell(varMap[sizeName]?.profit ?? 0),
+                      ],
                       DataCell(Text('${product.totalSales}')),
                       DataCell(Text(
                         '\$${product.totalRevenue.toStringAsFixed(2)}',
