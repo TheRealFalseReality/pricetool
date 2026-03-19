@@ -3825,8 +3825,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   void _addAdditionalSize() {
     setState(() {
       _additionalNameControllers.add(TextEditingController(text: 'Extra ${_additionalNameControllers.length + 1}'));
-      _additionalTimeControllers.add(TextEditingController(text: '0'));
-      _additionalGramControllers.add(TextEditingController(text: '0'));
+      _additionalTimeControllers.add(TextEditingController(text: ''));
+      _additionalGramControllers.add(TextEditingController(text: ''));
     });
   }
 
