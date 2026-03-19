@@ -3160,9 +3160,9 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                       style: TextStyle(fontSize: 13, color: Colors.grey[400]),
                     ),
                     const SizedBox(height: 16),
-                    _buildTextField('smallPriceCap', '1st Size Price Cap (\$)'),
-                    _buildTextField('multicolorSmallPriceCap', 'Multicolor 1st Size Price Cap (\$)'),
-                    _buildTextField('multicolorSmallPriceMin', 'Multicolor 1st Size Price Min (\$)'),
+                    _buildTextField('smallPriceCap', 'First Size Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceCap', 'Multicolor First Size Price Cap (\$)'),
+                    _buildTextField('multicolorSmallPriceMin', 'Multicolor First Size Price Min (\$)'),
                     _buildTextField('minGapSmallMedium', 'Min Gap: 1st ↔ 2nd Size (\$)'),
                     _buildTextField('minGapMediumLarge', 'Min Gap: 2nd ↔ 3rd Size (\$)'),
                   ],
@@ -3265,6 +3265,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   /// Safe to call from initState or during a setState call.
   void _initializeSizeControllers(String categoryId) {
     final state = context.read<DataBloc>().state;
+    if (state.categories.isEmpty) return;
     final category = state.categories.firstWhere(
       (c) => c.id == categoryId,
       orElse: () => state.categories.first,
@@ -3653,11 +3654,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       });
 
       // Build dynamic variation lists from the current sizes
+      // Filter out sizes that have no user input (time and grams both zero/empty)
       final savedNames = <String>[];
       final savedVars = <ProductVariation>[];
       for (final name in _currentSizeNames) {
-        savedNames.add(name);
-        savedVars.add(newVariations[name] ?? ProductVariation());
+        final v = newVariations[name] ?? ProductVariation();
+        if (v.printTimeHours > 0 || v.filamentGrams > 0) {
+          savedNames.add(name);
+          savedVars.add(v);
+        }
       }
 
       // Map to legacy fields for backward compatibility (S/M/L by name, then by index)
@@ -3800,7 +3805,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             const SizedBox(height: 16),
             Card(
               child: ExpansionTile(
-                initiallyExpanded: true,
+                initiallyExpanded: false,
                 leading: Icon(Icons.straighten, color: Theme.of(context).colorScheme.primary),
                 title: Text(
                   'Product Sizes',
