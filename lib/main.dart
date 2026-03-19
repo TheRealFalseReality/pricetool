@@ -175,6 +175,10 @@ class Product extends HiveObject {
   ProductVariation? mediumMulticolorVariation;
   @HiveField(12)
   ProductVariation? largeMulticolorVariation;
+  @HiveField(13)
+  List<ProductVariation>? additionalVariations;
+  @HiveField(14)
+  List<String>? additionalVariationNames;
 
   Product({
     required this.id,
@@ -190,6 +194,8 @@ class Product extends HiveObject {
     this.smallMulticolorVariation,
     this.mediumMulticolorVariation,
     this.largeMulticolorVariation,
+    this.additionalVariations,
+    this.additionalVariationNames,
   });
 
   // For JSON serialization
@@ -207,6 +213,8 @@ class Product extends HiveObject {
     'smallMulticolorVariation': smallMulticolorVariation?.toJson(),
     'mediumMulticolorVariation': mediumMulticolorVariation?.toJson(),
     'largeMulticolorVariation': largeMulticolorVariation?.toJson(),
+    'additionalVariations': additionalVariations?.map((v) => v.toJson()).toList(),
+    'additionalVariationNames': additionalVariationNames,
   };
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -228,6 +236,12 @@ class Product extends HiveObject {
         : null,
     largeMulticolorVariation: json['largeMulticolorVariation'] != null 
         ? ProductVariation.fromJson(json['largeMulticolorVariation'])
+        : null,
+    additionalVariations: json['additionalVariations'] != null
+        ? (json['additionalVariations'] as List).map((v) => ProductVariation.fromJson(v as Map<String, dynamic>)).toList()
+        : null,
+    additionalVariationNames: json['additionalVariationNames'] != null
+        ? (json['additionalVariationNames'] as List).cast<String>()
         : null,
   );
 }
@@ -401,13 +415,15 @@ class ProductAdapter extends TypeAdapter<Product> {
       smallMulticolorVariation: fields.containsKey(10) ? fields[10] as ProductVariation? : null,
       mediumMulticolorVariation: fields.containsKey(11) ? fields[11] as ProductVariation? : null,
       largeMulticolorVariation: fields.containsKey(12) ? fields[12] as ProductVariation? : null,
+      additionalVariations: fields.containsKey(13) ? (fields[13] as List?)?.cast<ProductVariation>() : null,
+      additionalVariationNames: fields.containsKey(14) ? (fields[14] as List?)?.cast<String>() : null,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -433,7 +449,11 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(11)
       ..write(obj.mediumMulticolorVariation)
       ..writeByte(12)
-      ..write(obj.largeMulticolorVariation);
+      ..write(obj.largeMulticolorVariation)
+      ..writeByte(13)
+      ..write(obj.additionalVariations)
+      ..writeByte(14)
+      ..write(obj.additionalVariationNames);
   }
 }
 
@@ -854,6 +874,15 @@ class _HomePageState extends State<HomePage> {
     _addVariationToDisplay(parts, product.smallMulticolorVariation, 'MC-S');
     _addVariationToDisplay(parts, product.mediumMulticolorVariation, 'MC-M');
     _addVariationToDisplay(parts, product.largeMulticolorVariation, 'MC-L');
+
+    // Add additional sizes if they exist
+    if (product.additionalVariations != null) {
+      final names = product.additionalVariationNames ?? [];
+      for (int i = 0; i < product.additionalVariations!.length; i++) {
+        final label = i < names.length ? names[i] : 'Extra ${i + 1}';
+        _addVariationToDisplay(parts, product.additionalVariations![i], label);
+      }
+    }
     
     return parts.join(' | ');
   }
@@ -879,6 +908,13 @@ class _HomePageState extends State<HomePage> {
     _addVariationToAverage(product.smallMulticolorVariation, prices);
     _addVariationToAverage(product.mediumMulticolorVariation, prices);
     _addVariationToAverage(product.largeMulticolorVariation, prices);
+
+    // Add additional size variations
+    if (product.additionalVariations != null) {
+      for (final v in product.additionalVariations!) {
+        _addVariationToAverage(v, prices);
+      }
+    }
     
     if (prices.isNotEmpty) {
       final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
@@ -1263,6 +1299,13 @@ class StatisticsPage extends StatelessWidget {
       }
       if (product.largeMulticolorVariation?.etsyPrice != null && product.largeMulticolorVariation!.etsyPrice > 0) {
         addVariation(product.largeMulticolorVariation!);
+      }
+
+      // Process additional variations
+      if (product.additionalVariations != null) {
+        for (final variation in product.additionalVariations!) {
+          if (variation.etsyPrice > 0) addVariation(variation);
+        }
       }
 
       if (productVariations > 0) {
@@ -1980,6 +2023,26 @@ class ProfitMarginAnalyzer extends StatelessWidget {
             'marginPercent': marginPercent,
             'cost': variation.etsyPrice - variation.profit,
           });
+        }
+      }
+
+      // Include additional variations
+      if (product.additionalVariations != null) {
+        final names = product.additionalVariationNames ?? [];
+        for (int i = 0; i < product.additionalVariations!.length; i++) {
+          final variation = product.additionalVariations![i];
+          if (variation.etsyPrice > 0) {
+            final sizeName = i < names.length ? names[i] : 'Extra ${i + 1}';
+            final marginPercent = (variation.profit / variation.etsyPrice) * 100;
+            analysis.add({
+              'product': product,
+              'size': sizeName,
+              'price': variation.etsyPrice,
+              'profit': variation.profit,
+              'marginPercent': marginPercent,
+              'cost': variation.etsyPrice - variation.profit,
+            });
+          }
         }
       }
     }
@@ -3035,6 +3098,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
   late TextEditingController _sMcTimeController, _sMcGramController, _sMcModelsController;
   late TextEditingController _mMcTimeController, _mMcGramController, _mMcModelsController;
   late TextEditingController _lMcTimeController, _lMcGramController, _lMcModelsController;
+
+  // Additional size controllers
+  final List<TextEditingController> _additionalNameControllers = [];
+  final List<TextEditingController> _additionalTimeControllers = [];
+  final List<TextEditingController> _additionalGramControllers = [];
   
   late String _selectedCategoryId;
   Map<String, Map<String, double?>> _pricingResult = {};
@@ -3073,6 +3141,18 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     final categories = context.read<DataBloc>().state.categories;
     _selectedCategoryId = widget.product?.categoryId ?? (categories.isNotEmpty ? categories.first.id : 'default_3d_models');
 
+    // Initialize additional sizes from product if editing
+    if (widget.product?.additionalVariations != null) {
+      final additionalVars = widget.product!.additionalVariations!;
+      final additionalNames = widget.product!.additionalVariationNames ?? [];
+      for (int i = 0; i < additionalVars.length; i++) {
+        final name = i < additionalNames.length ? additionalNames[i] : 'Extra ${i + 1}';
+        _additionalNameControllers.add(TextEditingController(text: name));
+        _additionalTimeControllers.add(TextEditingController(text: additionalVars[i].printTimeHours.toString()));
+        _additionalGramControllers.add(TextEditingController(text: additionalVars[i].filamentGrams.toString()));
+      }
+    }
+
     // If editing, show existing prices immediately
     if (_isEditing) {
       _showExistingPrices();
@@ -3101,6 +3181,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
     _lMcTimeController.dispose();
     _lMcGramController.dispose();
     _lMcModelsController.dispose();
+    for (final c in _additionalNameControllers) c.dispose();
+    for (final c in _additionalTimeControllers) c.dispose();
+    for (final c in _additionalGramControllers) c.dispose();
     super.dispose();
   }
   
@@ -3124,6 +3207,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       }
       if (product.largeMulticolorVariation != null) {
         variations['Multicolor Large'] = product.largeMulticolorVariation!;
+      }
+
+      // Add additional variations if they exist
+      if (product.additionalVariations != null) {
+        final names = product.additionalVariationNames ?? [];
+        for (int i = 0; i < product.additionalVariations!.length; i++) {
+          final name = i < names.length ? names[i] : 'Extra ${i + 1}';
+          variations[name] = product.additionalVariations![i];
+        }
       }
 
       Map<String, Map<String, double?>> newResults = {};
@@ -3329,6 +3421,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       variationsData.forEach(calculateVariationPrice);
       multicolorVariationsData.forEach(calculateMulticolorVariationPrice);
 
+      // Calculate additional sizes
+      for (int i = 0; i < _additionalNameControllers.length; i++) {
+        final name = _additionalNameControllers[i].text.isNotEmpty
+            ? _additionalNameControllers[i].text
+            : 'Extra ${i + 1}';
+        calculateVariationPrice(name, {
+          'time': double.tryParse(_additionalTimeControllers[i].text) ?? 0.0,
+          'grams': double.tryParse(_additionalGramControllers[i].text) ?? 0.0,
+        });
+      }
+
       // Second pass: apply small price cap (only for single-color small)
       if (newResults.containsKey('Small') && category.smallPriceCap > 0) {
         final smallPrice = newResults['Small']!['etsyPrice']!;
@@ -3415,6 +3518,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
          _pricingResult = newResults;
       });
 
+      // Build additional variations list
+      List<ProductVariation>? additionalVariationsList;
+      List<String>? additionalVariationNamesList;
+      if (_additionalNameControllers.isNotEmpty) {
+        additionalVariationsList = [];
+        additionalVariationNamesList = [];
+        for (int i = 0; i < _additionalNameControllers.length; i++) {
+          final name = _additionalNameControllers[i].text.isNotEmpty
+              ? _additionalNameControllers[i].text
+              : 'Extra ${i + 1}';
+          additionalVariationNamesList.add(name);
+          additionalVariationsList.add(newVariations[name] ?? ProductVariation());
+        }
+      }
+
       final product = Product(
         id: _isEditing ? widget.product!.id : const Uuid().v4(),
         name: _nameController.text,
@@ -3427,6 +3545,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         smallMulticolorVariation: newVariations['Multicolor Small'],
         mediumMulticolorVariation: newVariations['Multicolor Medium'],
         largeMulticolorVariation: newVariations['Multicolor Large'],
+        additionalVariations: additionalVariationsList,
+        additionalVariationNames: additionalVariationNamesList,
       );
       
       if (_isEditing) {
@@ -3611,6 +3731,45 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            Card(
+              child: ExpansionTile(
+                initiallyExpanded: _additionalNameControllers.isNotEmpty,
+                leading: Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary),
+                title: Text(
+                  'Additional Sizes${_additionalNameControllers.isNotEmpty ? " (${_additionalNameControllers.length})" : " (Optional)"}',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                children: [
+                  if (_additionalNameControllers.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Text(
+                        'No additional sizes. Tap "Add Size" to add custom sizes beyond Small/Medium/Large.',
+                        style: TextStyle(color: Colors.grey[500], fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  if (_additionalNameControllers.isNotEmpty)
+                    ReorderableListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      onReorder: _reorderAdditionalSizes,
+                      itemCount: _additionalNameControllers.length,
+                      itemBuilder: (context, index) => _buildAdditionalSizeCard(index),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Size'),
+                      onPressed: _addAdditionalSize,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 20),
             SizedBox(
               height: 54,
@@ -3663,9 +3822,93 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       );
   }
 
+  void _addAdditionalSize() {
+    setState(() {
+      _additionalNameControllers.add(TextEditingController(text: 'Extra ${_additionalNameControllers.length + 1}'));
+      _additionalTimeControllers.add(TextEditingController(text: '0'));
+      _additionalGramControllers.add(TextEditingController(text: '0'));
+    });
+  }
+
+  void _removeAdditionalSize(int index) {
+    setState(() {
+      _additionalNameControllers[index].dispose();
+      _additionalNameControllers.removeAt(index);
+      _additionalTimeControllers[index].dispose();
+      _additionalTimeControllers.removeAt(index);
+      _additionalGramControllers[index].dispose();
+      _additionalGramControllers.removeAt(index);
+    });
+  }
+
+  void _reorderAdditionalSizes(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex--;
+      final nameCtrl = _additionalNameControllers.removeAt(oldIndex);
+      _additionalNameControllers.insert(newIndex, nameCtrl);
+      final timeCtrl = _additionalTimeControllers.removeAt(oldIndex);
+      _additionalTimeControllers.insert(newIndex, timeCtrl);
+      final gramCtrl = _additionalGramControllers.removeAt(oldIndex);
+      _additionalGramControllers.insert(newIndex, gramCtrl);
+    });
+  }
+
+  Widget _buildAdditionalSizeCard(int index) {
+    return Card(
+      key: ValueKey('extra_size_$index'),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ReorderableDragStartListener(
+                  index: index,
+                  child: const Padding(
+                    padding: EdgeInsets.only(right: 8.0),
+                    child: Icon(Icons.drag_handle, color: Colors.grey),
+                  ),
+                ),
+                Expanded(
+                  child: TextFormField(
+                    controller: _additionalNameControllers[index],
+                    decoration: const InputDecoration(
+                      labelText: 'Size Name',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: () => _removeAdditionalSize(index),
+                  tooltip: 'Remove size',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField(_additionalTimeControllers[index], 'Print Time (hours)', isRequired: false),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildTextField(_additionalGramControllers[index], 'Filament (grams)', isRequired: false),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTextField(TextEditingController controller, String label, {bool isRequired = true}) {
-    TextInputType keyboardType = (label.contains('URL') || label.contains('Name')) 
-        ? TextInputType.text 
+    TextInputType keyboardType = (label.contains('URL') || label.contains('Name'))
+        ? TextInputType.text
         : const TextInputType.numberWithOptions(decimal: true);
 
     return TextFormField(
@@ -3679,7 +3922,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
           if (isRequired && (value == null || value.isEmpty)) {
             return 'This field is required';
           }
-          if (keyboardType != TextInputType.text && double.tryParse(value ?? '0') == null) {
+          if (keyboardType != TextInputType.text && value != null && value.isNotEmpty && double.tryParse(value) == null) {
             return 'Please enter a valid number';
           }
           return null;
