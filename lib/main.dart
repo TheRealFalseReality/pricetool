@@ -683,11 +683,11 @@ class DataBloc extends Bloc<DataEvent, DataState> {
     for (final category in event.categories) {
       await categoryBox.put(category.id, category);
     }
+    // Build a lookup map to avoid O(N×M) firstWhere inside the product loop
+    final categoryMap = {for (final c in event.categories) c.id: c};
+    final fallback = event.categories.first;
     for (final product in productBox.values.toList()) {
-      final category = event.categories.firstWhere(
-        (c) => c.id == product.categoryId,
-        orElse: () => event.categories.first,
-      );
+      final category = categoryMap[product.categoryId] ?? fallback;
       final updated = computeProductPricing(product, category, event.settings);
       await productBox.put(updated.id, updated);
     }
@@ -779,9 +779,10 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// --- Part 4: UI Screens ---
-
-// --- Pricing Calculation Utilities (top-level) ---
+// --- Part 3.5: Shared Pricing Business Logic ---
+// These top-level functions are used by both ProductDetailPage and the BLoC
+// handler for RecalculateAllPrices. They shadow the instance methods of the
+// same name in _ProductDetailPageState (Dart resolves them by scope).
 
 double _roundToNearestEven(double value) {
   double roundedUp = value.ceilToDouble();
@@ -923,6 +924,8 @@ Product computeProductPricing(Product product, Category category, Settings setti
     largeMulticolorVariation: mcLarge,
   );
 }
+
+// --- Part 4: UI Screens ---
 
 // --- Main Navigation Page with Bottom Navigation Bar ---
 class MainNavigationPage extends StatefulWidget {
