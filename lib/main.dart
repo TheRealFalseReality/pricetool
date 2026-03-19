@@ -507,6 +507,11 @@ class IncrementSales extends DataEvent {
   final double saleAmount;
   IncrementSales(this.productId, this.saleAmount);
 }
+class RecalculateAllPrices extends DataEvent {
+  final Settings settings;
+  final List<Category> categories;
+  RecalculateAllPrices({required this.settings, required this.categories});
+}
 
 class DataState {
   final List<Product> products;
@@ -531,6 +536,7 @@ class DataBloc extends Bloc<DataEvent, DataState> {
     on<DeleteCategory>(_onDeleteCategory);
     on<RestoreData>(_onRestoreData);
     on<IncrementSales>(_onIncrementSales);
+    on<RecalculateAllPrices>(_onRecalculateAllPrices);
   }
 
   void _onLoadData(LoadData event, Emitter<DataState> emit) {
@@ -671,6 +677,22 @@ class DataBloc extends Bloc<DataEvent, DataState> {
       add(LoadData());
     }
   }
+
+  Future<void> _onRecalculateAllPrices(RecalculateAllPrices event, Emitter<DataState> emit) async {
+    await settingsBox.put('main', event.settings);
+    for (final category in event.categories) {
+      await categoryBox.put(category.id, category);
+    }
+    for (final product in productBox.values.toList()) {
+      final category = event.categories.firstWhere(
+        (c) => c.id == product.categoryId,
+        orElse: () => event.categories.first,
+      );
+      final updated = computeProductPricing(product, category, event.settings);
+      await productBox.put(updated.id, updated);
+    }
+    add(LoadData());
+  }
 }
 
 // --- Main App Entry Point ---
@@ -759,6 +781,149 @@ class MyApp extends StatelessWidget {
 
 // --- Part 4: UI Screens ---
 
+// --- Pricing Calculation Utilities (top-level) ---
+
+double _roundToNearestEven(double value) {
+  double roundedUp = value.ceilToDouble();
+  if (roundedUp % 2 != 0) return roundedUp + 1;
+  return roundedUp;
+}
+
+double _applyAvoidanceZone(double price, double minZone, double maxZone, double threshold) {
+  if (minZone <= 0 || maxZone <= 0 || minZone >= maxZone) return price;
+  if (price > minZone && price < maxZone) {
+    if (threshold > 0 && threshold <= (maxZone - minZone)) {
+      return price <= minZone + threshold ? minZone : maxZone;
+    }
+    return (price - minZone) < (maxZone - price) ? minZone : maxZone;
+  }
+  return price;
+}
+
+/// Recalculates all variation prices for [product] using [category] and [settings].
+/// Preserves totalSales and totalRevenue. Applies caps and gap adjustments.
+Product computeProductPricing(Product product, Category category, Settings settings) {
+  ProductVariation calcSingleColor(ProductVariation v) {
+    if (v.printTimeHours <= 0 || v.filamentGrams <= 0) {
+      return ProductVariation(printTimeHours: v.printTimeHours, filamentGrams: v.filamentGrams);
+    }
+    final filamentCost = v.filamentGrams * (category.filamentCostPerKg / 1000);
+    final electricityCost = v.printTimeHours * settings.electricityCostKwh;
+    final totalCost = filamentCost + electricityCost + category.laborCost + category.licenseFee;
+    final profitAmount = totalCost * (category.profitMargin / 100);
+    final target = totalCost + profitAmount + category.shippingCost;
+    final raw = (target + settings.etsyListingFee) / (1 - settings.etsyFeesPercent / 100);
+    final price = _applyAvoidanceZone(
+      _roundToNearestEven(raw),
+      category.avoidanceZoneMin, category.avoidanceZoneMax, category.avoidanceZoneThreshold,
+    );
+    return ProductVariation(
+      printTimeHours: v.printTimeHours, filamentGrams: v.filamentGrams,
+      etsyPrice: price, profit: profitAmount, originalPrice: price,
+    );
+  }
+
+  ProductVariation? calcMulticolor(ProductVariation? v) {
+    if (v == null) return null;
+    if (v.printTimeHours <= 0 || v.filamentGrams <= 0 || v.numberOfModels <= 0) {
+      return ProductVariation(
+        printTimeHours: v.printTimeHours, filamentGrams: v.filamentGrams, numberOfModels: v.numberOfModels,
+      );
+    }
+    final n = v.numberOfModels;
+    final filamentCost = v.filamentGrams * (category.filamentCostPerKg / 1000);
+    final electricityCost = v.printTimeHours * settings.electricityCostKwh;
+    final totalCost = filamentCost + electricityCost + category.laborCost + category.licenseFee;
+    final profitAmount = totalCost * (category.profitMargin / 100);
+    final target = totalCost + profitAmount + category.shippingCost;
+    final raw = (target + settings.etsyListingFee) / (1 - settings.etsyFeesPercent / 100);
+    final totalPrice = _applyAvoidanceZone(
+      _roundToNearestEven(raw),
+      category.avoidanceZoneMin, category.avoidanceZoneMax, category.avoidanceZoneThreshold,
+    );
+    final price = _roundToNearestEven(totalPrice / n);
+    return ProductVariation(
+      printTimeHours: v.printTimeHours, filamentGrams: v.filamentGrams,
+      etsyPrice: price, profit: profitAmount / n, originalPrice: price, numberOfModels: n,
+    );
+  }
+
+  var small = calcSingleColor(product.smallVariation);
+  var medium = calcSingleColor(product.mediumVariation);
+  var large = calcSingleColor(product.largeVariation);
+  var mcSmall = calcMulticolor(product.smallMulticolorVariation);
+  final mcMedium = calcMulticolor(product.mediumMulticolorVariation);
+  final mcLarge = calcMulticolor(product.largeMulticolorVariation);
+
+  // Small price cap
+  if (category.smallPriceCap > 0 && small.etsyPrice > category.smallPriceCap) {
+    small = ProductVariation(
+      printTimeHours: small.printTimeHours, filamentGrams: small.filamentGrams,
+      etsyPrice: category.smallPriceCap, profit: small.profit, originalPrice: small.etsyPrice,
+    );
+  }
+  // Multicolor small cap
+  if (mcSmall != null && category.multicolorSmallPriceCap > 0 && mcSmall.etsyPrice > category.multicolorSmallPriceCap) {
+    mcSmall = ProductVariation(
+      printTimeHours: mcSmall.printTimeHours, filamentGrams: mcSmall.filamentGrams,
+      etsyPrice: category.multicolorSmallPriceCap, profit: mcSmall.profit,
+      originalPrice: mcSmall.etsyPrice, numberOfModels: mcSmall.numberOfModels,
+    );
+  }
+  // Multicolor small min
+  if (mcSmall != null && category.multicolorSmallPriceMin > 0 && mcSmall.etsyPrice < category.multicolorSmallPriceMin) {
+    mcSmall = ProductVariation(
+      printTimeHours: mcSmall.printTimeHours, filamentGrams: mcSmall.filamentGrams,
+      etsyPrice: category.multicolorSmallPriceMin, profit: mcSmall.profit,
+      originalPrice: mcSmall.originalPrice > 0 ? mcSmall.originalPrice : mcSmall.etsyPrice,
+      numberOfModels: mcSmall.numberOfModels,
+    );
+  }
+  // Cascading gap adjustments
+  if (category.minGapSmallMedium > 0 || category.minGapMediumLarge > 0) {
+    final smallPrice = small.etsyPrice;
+    var mediumPrice = medium.etsyPrice;
+    final mediumOriginalPrice = medium.originalPrice;
+    final largePrice = large.etsyPrice;
+    final largeOriginalPrice = large.originalPrice;
+
+    if (smallPrice > 0 && mediumPrice > 0 && category.minGapSmallMedium > 0) {
+      if (mediumPrice - smallPrice < category.minGapSmallMedium) {
+        final adj = smallPrice + category.minGapSmallMedium;
+        if (mediumOriginalPrice > 0 && adj > mediumOriginalPrice) {
+          medium = ProductVariation(
+            printTimeHours: medium.printTimeHours, filamentGrams: medium.filamentGrams,
+            etsyPrice: adj, profit: medium.profit, originalPrice: mediumOriginalPrice,
+          );
+          mediumPrice = adj;
+        }
+      }
+    }
+    if (mediumPrice > 0 && largePrice > 0 && category.minGapMediumLarge > 0) {
+      if (largePrice - mediumPrice < category.minGapMediumLarge) {
+        final adj = mediumPrice + category.minGapMediumLarge;
+        if (largeOriginalPrice > 0 && adj > largeOriginalPrice) {
+          large = ProductVariation(
+            printTimeHours: large.printTimeHours, filamentGrams: large.filamentGrams,
+            etsyPrice: adj, profit: large.profit, originalPrice: largeOriginalPrice,
+          );
+        }
+      }
+    }
+  }
+
+  return Product(
+    id: product.id, name: product.name,
+    imageUrl: product.imageUrl, listingUrl: product.listingUrl,
+    smallVariation: small, mediumVariation: medium, largeVariation: large,
+    categoryId: product.categoryId,
+    totalSales: product.totalSales, totalRevenue: product.totalRevenue,
+    smallMulticolorVariation: mcSmall,
+    mediumMulticolorVariation: mcMedium,
+    largeMulticolorVariation: mcLarge,
+  );
+}
+
 // --- Main Navigation Page with Bottom Navigation Bar ---
 class MainNavigationPage extends StatefulWidget {
   const MainNavigationPage({super.key});
@@ -774,6 +939,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     HomePage(),
     StatisticsPage(),
     SettingsPage(),
+    SpreadsheetPage(),
   ];
 
   @override
@@ -802,6 +968,11 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: 'Settings',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.table_chart_outlined),
+            selectedIcon: Icon(Icons.table_chart),
+            label: 'Spreadsheet',
           ),
         ],
       ),
@@ -3732,6 +3903,521 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                 ],
             )
         )
+    );
+  }
+}
+
+// --- Spreadsheet View Page ---
+class SpreadsheetPage extends StatefulWidget {
+  const SpreadsheetPage({super.key});
+
+  @override
+  _SpreadsheetPageState createState() => _SpreadsheetPageState();
+}
+
+class _SpreadsheetPageState extends State<SpreadsheetPage> {
+  bool _settingsModified = false;
+  late TextEditingController _electricityController;
+  late TextEditingController _etsyFeesController;
+  late TextEditingController _etsyListingFeeController;
+  final Map<String, TextEditingController> _categoryControllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    final s = context.read<DataBloc>().state.settings;
+    _electricityController = TextEditingController(text: s.electricityCostKwh.toString())
+      ..addListener(_onChanged);
+    _etsyFeesController = TextEditingController(text: s.etsyFeesPercent.toString())
+      ..addListener(_onChanged);
+    _etsyListingFeeController = TextEditingController(text: s.etsyListingFee.toString())
+      ..addListener(_onChanged);
+  }
+
+  @override
+  void dispose() {
+    _electricityController.dispose();
+    _etsyFeesController.dispose();
+    _etsyListingFeeController.dispose();
+    for (final c in _categoryControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (!_settingsModified) setState(() => _settingsModified = true);
+  }
+
+  /// Lazily creates and caches a controller for a category field.
+  TextEditingController _catCtrl(String catId, String field, double defaultVal) {
+    final key = '${catId}_$field';
+    if (!_categoryControllers.containsKey(key)) {
+      _categoryControllers[key] = TextEditingController(text: defaultVal.toString())
+        ..addListener(_onChanged);
+    }
+    return _categoryControllers[key]!;
+  }
+
+  void _applyAndRecalculate() {
+    final state = context.read<DataBloc>().state;
+
+    final newSettings = Settings.defaults()
+      ..electricityCostKwh = double.tryParse(_electricityController.text) ?? state.settings.electricityCostKwh
+      ..etsyFeesPercent = double.tryParse(_etsyFeesController.text) ?? state.settings.etsyFeesPercent
+      ..etsyListingFee = double.tryParse(_etsyListingFeeController.text) ?? state.settings.etsyListingFee;
+
+    double getVal(Category cat, String field, double def) =>
+        double.tryParse(_catCtrl(cat.id, field, def).text) ?? def;
+
+    final updatedCategories = state.categories.map((cat) => Category(
+      id: cat.id,
+      name: cat.name,
+      filamentCostPerKg: getVal(cat, 'filamentCostPerKg', cat.filamentCostPerKg),
+      laborCost: getVal(cat, 'laborCost', cat.laborCost),
+      licenseFee: getVal(cat, 'licenseFee', cat.licenseFee),
+      shippingCost: getVal(cat, 'shippingCost', cat.shippingCost),
+      profitMargin: getVal(cat, 'profitMargin', cat.profitMargin),
+      avoidanceZoneMin: getVal(cat, 'avoidanceZoneMin', cat.avoidanceZoneMin),
+      avoidanceZoneMax: getVal(cat, 'avoidanceZoneMax', cat.avoidanceZoneMax),
+      avoidanceZoneThreshold: getVal(cat, 'avoidanceZoneThreshold', cat.avoidanceZoneThreshold),
+      smallPriceCap: getVal(cat, 'smallPriceCap', cat.smallPriceCap),
+      minGapSmallMedium: getVal(cat, 'minGapSmallMedium', cat.minGapSmallMedium),
+      minGapMediumLarge: getVal(cat, 'minGapMediumLarge', cat.minGapMediumLarge),
+      multicolorSmallPriceCap: getVal(cat, 'multicolorSmallPriceCap', cat.multicolorSmallPriceCap),
+      multicolorSmallPriceMin: getVal(cat, 'multicolorSmallPriceMin', cat.multicolorSmallPriceMin),
+    )).toList();
+
+    context.read<DataBloc>().add(RecalculateAllPrices(
+      settings: newSettings,
+      categories: updatedCategories,
+    ));
+
+    setState(() => _settingsModified = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Settings saved & all prices recalculated!'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ── compact text field for global settings ──────────────────────────────
+  Widget _globalField(TextEditingController ctrl, String label, {double width = 140}) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        controller: ctrl,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 11),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      ),
+    );
+  }
+
+  // ── compact text field for category table cells ──────────────────────────
+  Widget _catField(TextEditingController ctrl, {double width = 82}) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        controller: ctrl,
+        style: const TextStyle(fontSize: 12),
+        textAlign: TextAlign.center,
+        decoration: const InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      ),
+    );
+  }
+
+  Widget _colHeader(String text, double width) => SizedBox(
+        width: width,
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[400],
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Spreadsheet View'),
+        actions: [
+          if (_settingsModified)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                icon: const Icon(Icons.check_circle, color: Colors.amber),
+                label: const Text('Apply', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                onPressed: _applyAndRecalculate,
+              ),
+            ),
+        ],
+      ),
+      body: BlocBuilder<DataBloc, DataState>(
+        builder: (context, state) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildGlobalSettingsCard(state),
+              const SizedBox(height: 16),
+              _buildCategorySettingsCard(state),
+              const SizedBox(height: 12),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: _settingsModified
+                    ? SizedBox(
+                        key: const ValueKey('applyBtn'),
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.play_circle_filled),
+                          label: const Text(
+                            'Apply Changes & Recalculate All Prices',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: _applyAndRecalculate,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber[700],
+                            foregroundColor: Colors.black,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(key: ValueKey('noBtn')),
+              ),
+              const SizedBox(height: 16),
+              _buildProductTable(state),
+              const SizedBox(height: 24),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildGlobalSettingsCard(DataState state) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.public, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Global Settings',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '— applied to all categories',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _globalField(_electricityController, 'Electricity \$/kWh'),
+                _globalField(_etsyFeesController, 'Etsy Fees %'),
+                _globalField(_etsyListingFeeController, 'Listing Fee \$'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategorySettingsCard(DataState state) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.category, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Per-Category Settings',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const Spacer(),
+                Text(
+                  'scroll →',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header row
+                  Row(
+                    children: [
+                      _colHeader('Category', 148),
+                      _colHeader('Fil/kg \$', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Labor \$', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('License \$', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Shipping \$', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Margin %', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Avoid Min', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Avoid Max', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Avoid Th.', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Sm Cap \$', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('MC Cap \$', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('MC Min \$', 82),
+                      const SizedBox(width: 4),
+                      _colHeader('Gap S-M \$', 88),
+                      const SizedBox(width: 4),
+                      _colHeader('Gap M-L \$', 88),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  ...state.categories.map((cat) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Category name + edit link
+                        SizedBox(
+                          width: 148,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  cat.name,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => CategoryEditPage(category: cat)),
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(2),
+                                  child: Icon(Icons.open_in_new, size: 14, color: Colors.grey[500]),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                          ),
+                        ),
+                        _catField(_catCtrl(cat.id, 'filamentCostPerKg', cat.filamentCostPerKg)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'laborCost', cat.laborCost)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'licenseFee', cat.licenseFee)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'shippingCost', cat.shippingCost)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'profitMargin', cat.profitMargin)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'avoidanceZoneMin', cat.avoidanceZoneMin)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'avoidanceZoneMax', cat.avoidanceZoneMax)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'avoidanceZoneThreshold', cat.avoidanceZoneThreshold)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'smallPriceCap', cat.smallPriceCap)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'multicolorSmallPriceCap', cat.multicolorSmallPriceCap)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'multicolorSmallPriceMin', cat.multicolorSmallPriceMin)),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'minGapSmallMedium', cat.minGapSmallMedium), width: 88),
+                        const SizedBox(width: 4),
+                        _catField(_catCtrl(cat.id, 'minGapMediumLarge', cat.minGapMediumLarge), width: 88),
+                      ],
+                    ),
+                  )).toList(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductTable(DataState state) {
+    if (state.products.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Center(
+            child: Column(
+              children: [
+                Icon(Icons.table_chart_outlined, size: 52, color: Colors.grey[600]),
+                const SizedBox(height: 12),
+                Text('No products yet', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+                const SizedBox(height: 4),
+                Text('Add products from the Products tab', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final catNames = {for (final c in state.categories) c.id: c.name};
+
+    String priceStr(double p) => p > 0 ? '\$${p.toStringAsFixed(0)}' : '–';
+    String profitStr(double p) => p > 0 ? '\$${p.toStringAsFixed(2)}' : '–';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.table_chart, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Product Pricing Overview',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const Spacer(),
+                Text(
+                  '${state.products.length} product${state.products.length == 1 ? '' : 's'}  •  scroll →',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowHeight: 38,
+                dataRowMinHeight: 38,
+                dataRowMaxHeight: 52,
+                columnSpacing: 10,
+                horizontalMargin: 6,
+                headingTextStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                  color: Colors.grey[300],
+                ),
+                dataTextStyle: const TextStyle(fontSize: 12),
+                columns: const [
+                  DataColumn(label: Text('Product')),
+                  DataColumn(label: Text('Category')),
+                  DataColumn(label: Text('S. Price'), numeric: true),
+                  DataColumn(label: Text('S. Profit'), numeric: true),
+                  DataColumn(label: Text('M. Price'), numeric: true),
+                  DataColumn(label: Text('M. Profit'), numeric: true),
+                  DataColumn(label: Text('L. Price'), numeric: true),
+                  DataColumn(label: Text('L. Profit'), numeric: true),
+                  DataColumn(label: Text('MC-S'), numeric: true),
+                  DataColumn(label: Text('MC-M'), numeric: true),
+                  DataColumn(label: Text('MC-L'), numeric: true),
+                  DataColumn(label: Text('Sales'), numeric: true),
+                  DataColumn(label: Text('Revenue'), numeric: true),
+                ],
+                rows: state.products.map((product) {
+                  final catName = catNames[product.categoryId] ?? '–';
+                  final primary = Theme.of(context).colorScheme.secondary;
+
+                  DataCell priceCell(double price) => DataCell(Text(
+                    priceStr(price),
+                    style: TextStyle(
+                      color: price > 0 ? primary : Colors.grey,
+                      fontWeight: price > 0 ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ));
+                  DataCell profitCell(double profit) => DataCell(Text(
+                    profitStr(profit),
+                    style: TextStyle(
+                      color: profit > 0 ? Colors.greenAccent : Colors.grey,
+                    ),
+                  ));
+
+                  return DataRow(
+                    onSelectChanged: (_) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ProductDetailPage(product: product)),
+                      );
+                    },
+                    cells: [
+                      DataCell(SizedBox(
+                        width: 150,
+                        child: Text(
+                          product.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      )),
+                      DataCell(SizedBox(
+                        width: 100,
+                        child: Text(catName, overflow: TextOverflow.ellipsis),
+                      )),
+                      priceCell(product.smallVariation.etsyPrice),
+                      profitCell(product.smallVariation.profit),
+                      priceCell(product.mediumVariation.etsyPrice),
+                      profitCell(product.mediumVariation.profit),
+                      priceCell(product.largeVariation.etsyPrice),
+                      profitCell(product.largeVariation.profit),
+                      priceCell(product.smallMulticolorVariation?.etsyPrice ?? 0),
+                      priceCell(product.mediumMulticolorVariation?.etsyPrice ?? 0),
+                      priceCell(product.largeMulticolorVariation?.etsyPrice ?? 0),
+                      DataCell(Text('${product.totalSales}')),
+                      DataCell(Text(
+                        '\$${product.totalRevenue.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.amber),
+                      )),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
