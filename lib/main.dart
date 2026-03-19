@@ -4361,11 +4361,23 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
         if (!orderedSizeNames.contains(name)) orderedSizeNames.add(name);
       }
     }
+    var hasLegacyOnlyProduct = false;
     for (final product in state.products) {
       final names = product.additionalVariationNames;
       if (names != null && names.isNotEmpty) {
         for (final name in names) {
           if (!orderedSizeNames.contains(name)) orderedSizeNames.add(name);
+        }
+      } else {
+        // Product uses legacy small/medium/large variations
+        hasLegacyOnlyProduct = true;
+      }
+    }
+    // If any product relies on legacy small/medium/large keys, ensure those columns exist
+    if (hasLegacyOnlyProduct) {
+      for (final legacyName in const ['Small', 'Medium', 'Large']) {
+        if (!orderedSizeNames.contains(legacyName)) {
+          orderedSizeNames.add(legacyName);
         }
       }
     }
