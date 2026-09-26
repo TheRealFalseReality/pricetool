@@ -3967,8 +3967,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                     ..._pricingResult.entries.map((entry) {
                       return _ResultRow(
                         label: entry.key,
-                        materialCost: entry.value['materialCost'] ?? 0,
-                        electricityCost: entry.value['electricityCost'] ?? 0,
+                        materialCost: entry.value['materialCost'] ?? 0.0,
+                        electricityCost: entry.value['electricityCost'] ?? 0.0,
                         cost: entry.value['totalProductionCost']!,
                         profit: entry.value['profit']!,
                         price: entry.value['etsyPrice']!,
