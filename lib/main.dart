@@ -265,11 +265,14 @@ class Settings extends HiveObject {
   late double etsyFeesPercent;
   @HiveField(2)
   late double etsyListingFee;
+  @HiveField(3)
+  late double averagePowerWatts;
 
   Settings.defaults() {
     electricityCostKwh = 0.15;
     etsyFeesPercent = 9.5;
     etsyListingFee = 0.20;
+    averagePowerWatts = 1000.0;
   }
   
   // For JSON serialization
@@ -277,13 +280,15 @@ class Settings extends HiveObject {
     'electricityCostKwh': electricityCostKwh,
     'etsyFeesPercent': etsyFeesPercent,
     'etsyListingFee': etsyListingFee,
+    'averagePowerWatts': averagePowerWatts,
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) {
     return Settings.defaults()
-      ..electricityCostKwh = (json['electricityCostKwh'] as num).toDouble()
-      ..etsyFeesPercent = (json['etsyFeesPercent'] as num).toDouble()
-      ..etsyListingFee = (json['etsyListingFee'] as num).toDouble();
+      ..electricityCostKwh = (json['electricityCostKwh'] as num? ?? 0.15).toDouble()
+      ..etsyFeesPercent = (json['etsyFeesPercent'] as num? ?? 9.5).toDouble()
+      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble()
+      ..averagePowerWatts = (json['averagePowerWatts'] as num? ?? 1000.0).toDouble();
   }
   
   // Helper method to create from old settings for backward compatibility
@@ -291,7 +296,8 @@ class Settings extends HiveObject {
     return Settings.defaults()
       ..electricityCostKwh = (json['electricityCostKwh'] as num? ?? 0.15).toDouble()
       ..etsyFeesPercent = (json['etsyFeesPercent'] as num? ?? 9.5).toDouble()
-      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble();
+      ..etsyListingFee = (json['etsyListingFee'] as num? ?? 0.20).toDouble()
+      ..averagePowerWatts = (json['averagePowerWatts'] as num? ?? 1000.0).toDouble();
   }
 }
 
@@ -484,19 +490,22 @@ class SettingsAdapter extends TypeAdapter<Settings> {
     return Settings.defaults()
       ..electricityCostKwh = fields[0] as double
       ..etsyFeesPercent = fields[1] as double
-      ..etsyListingFee = fields[2] as double;
+      ..etsyListingFee = fields[2] as double
+      ..averagePowerWatts = fields.containsKey(3) ? fields[3] as double : 1000.0;
   }
 
   @override
   void write(BinaryWriter writer, Settings obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.electricityCostKwh)
       ..writeByte(1)
       ..write(obj.etsyFeesPercent)
       ..writeByte(2)
-      ..write(obj.etsyListingFee);
+      ..write(obj.etsyListingFee)
+      ..writeByte(3)
+      ..write(obj.averagePowerWatts);
   }
 }
 
@@ -835,6 +844,12 @@ double _applyAvoidanceZone(double price, double minZone, double maxZone, double 
   return price;
 }
 
+double _calculateFilamentCost(double filamentGrams, Category category) =>
+    filamentGrams * (category.filamentCostPerKg / 1000);
+
+double _calculateElectricityCost(double printTimeHours, Settings settings) =>
+    printTimeHours * (settings.averagePowerWatts / 1000) * settings.electricityCostKwh;
+
 /// Recalculates all variation prices for [product] using [category] and [settings].
 /// Preserves totalSales and totalRevenue. Applies caps and gap adjustments.
 Product computeProductPricing(Product product, Category category, Settings settings) {
@@ -842,8 +857,8 @@ Product computeProductPricing(Product product, Category category, Settings setti
     if (v.printTimeHours <= 0 || v.filamentGrams <= 0) {
       return ProductVariation(printTimeHours: v.printTimeHours, filamentGrams: v.filamentGrams);
     }
-    final filamentCost = v.filamentGrams * (category.filamentCostPerKg / 1000);
-    final electricityCost = v.printTimeHours * settings.electricityCostKwh;
+    final filamentCost = _calculateFilamentCost(v.filamentGrams, category);
+    final electricityCost = _calculateElectricityCost(v.printTimeHours, settings);
     final totalCost = filamentCost + electricityCost + category.laborCost + category.licenseFee;
     final profitAmount = totalCost * (category.profitMargin / 100);
     final target = totalCost + profitAmount + category.shippingCost;
@@ -866,8 +881,8 @@ Product computeProductPricing(Product product, Category category, Settings setti
       );
     }
     final n = v.numberOfModels;
-    final filamentCost = v.filamentGrams * (category.filamentCostPerKg / 1000);
-    final electricityCost = v.printTimeHours * settings.electricityCostKwh;
+    final filamentCost = _calculateFilamentCost(v.filamentGrams, category);
+    final electricityCost = _calculateElectricityCost(v.printTimeHours, settings);
     final totalCost = filamentCost + electricityCost + category.laborCost + category.licenseFee;
     final profitAmount = totalCost * (category.profitMargin / 100);
     final target = totalCost + profitAmount + category.shippingCost;
@@ -1735,6 +1750,7 @@ class StatisticsPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
                         _CostRow('Electricity Cost', '\$${state.settings.electricityCostKwh.toStringAsFixed(2)}/kWh'),
+                        _CostRow('Average Printer Power', '${state.settings.averagePowerWatts.toStringAsFixed(0)} W'),
                         _CostRow('Etsy Fees', '${state.settings.etsyFeesPercent.toStringAsFixed(1)}%'),
                         _CostRow('Etsy Listing Fee', '\$${state.settings.etsyListingFee.toStringAsFixed(2)}'),
                         const Divider(height: 24),
@@ -2456,6 +2472,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = context.read<DataBloc>().state.settings;
     _controllers = {
       'electricityCostKwh': TextEditingController(text: settings.electricityCostKwh.toString()),
+      'averagePowerWatts': TextEditingController(text: settings.averagePowerWatts.toString()),
       'etsyFeesPercent': TextEditingController(text: settings.etsyFeesPercent.toString()),
       'etsyListingFee': TextEditingController(text: settings.etsyListingFee.toString()),
     };
@@ -2763,6 +2780,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         const SizedBox(height: 16),
                         _buildTextField('electricityCostKwh', 'Electricity Cost (\$/kWh)'),
+                        _buildTextField('averagePowerWatts', 'Average Printer Power (W)'),
                         _buildTextField('etsyFeesPercent', 'Etsy Fees (%)'),
                         _buildTextField('etsyListingFee', 'Etsy Listing Fee (\$)'),
                         const SizedBox(height: 8),
@@ -3486,15 +3504,16 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
       
       variations.forEach((key, variation) {
         if (variation.etsyPrice > 0) {
-            final filamentCostPerGram = category.filamentCostPerKg / 1000;
-            final calculatedFilamentCost = variation.filamentGrams * filamentCostPerGram;
-            final calculatedElectricityCost = variation.printTimeHours * settings.electricityCostKwh;
+            final calculatedFilamentCost = _calculateFilamentCost(variation.filamentGrams, category);
+            final calculatedElectricityCost = _calculateElectricityCost(variation.printTimeHours, settings);
             final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + category.laborCost + category.licenseFee;
 
             // Determine if the price was adjusted (different from original)
             final wasAdjusted = variation.originalPrice > 0 && variation.originalPrice != variation.etsyPrice;
 
             newResults[key] = {
+              'materialCost': calculatedFilamentCost,
+              'electricityCost': calculatedElectricityCost,
               'totalProductionCost': totalProductionCost,
               'etsyPrice': variation.etsyPrice,
               'profit': variation.profit,
@@ -3572,11 +3591,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         double calculatedPrice = 0;
         double profitAmount = 0;
         double originalPriceValue = 0;
-        
         if (printTime > 0 && filamentGrams > 0) {
-            final filamentCostPerGram = category.filamentCostPerKg / 1000;
-            final calculatedFilamentCost = filamentGrams * filamentCostPerGram;
-            final calculatedElectricityCost = printTime * settings.electricityCostKwh;
+        if (printTime > 0 && filamentGrams > 0) {
+            final calculatedFilamentCost = _calculateFilamentCost(filamentGrams, category);
+            final calculatedElectricityCost = _calculateElectricityCost(printTime, settings);
             
             final totalProductionCost = calculatedFilamentCost + calculatedElectricityCost + category.laborCost + category.licenseFee;
             profitAmount = totalProductionCost * (category.profitMargin / 100);
@@ -3593,6 +3611,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
             originalPriceValue = calculatedPrice;
 
             newResults[key] = {
+              'materialCost': calculatedFilamentCost,
+              'electricityCost': calculatedElectricityCost,
               'totalProductionCost': totalProductionCost,
               'etsyPrice': calculatedPrice,
               'profit': profitAmount,
@@ -3938,7 +3958,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: const [
                         SizedBox(width: 50, child: Text('Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                        SizedBox(width: 60, child: Text('Cost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                        SizedBox(width: 130, child: Text('Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
                         SizedBox(width: 60, child: Text('Profit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
                         SizedBox(width: 80, child: Text('Etsy Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.end)),
                       ],
@@ -3946,16 +3966,18 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
                     const Divider(height: 16),
                     ..._pricingResult.entries.map((entry) {
                       return _ResultRow(
-                          entry.key,
-                          entry.value['totalProductionCost']!,
-                          entry.value['profit']!,
-                          entry.value['etsyPrice']!,
-                          entry.value['suggestedPrice'],
-                          entry.value['originalPrice'],
-                          entry.value['totalPrice'],
-                          entry.value['numberOfModels'],
-                          entry.value['totalCost'],
-                          entry.value['totalProfit'],
+                        label: entry.key,
+                        materialCost: entry.value['materialCost'] ?? 0.0,
+                        electricityCost: entry.value['electricityCost'] ?? 0.0,
+                        cost: entry.value['totalProductionCost']!,
+                        profit: entry.value['profit']!,
+                        price: entry.value['etsyPrice']!,
+                        suggestedPrice: entry.value['suggestedPrice'],
+                        originalPrice: entry.value['originalPrice'],
+                        totalPrice: entry.value['totalPrice'],
+                        numberOfModels: entry.value['numberOfModels'],
+                        totalCost: entry.value['totalCost'],
+                        totalProfit: entry.value['totalProfit'],
                       );
                     }).toList(),
                 ],
@@ -3976,6 +3998,7 @@ class SpreadsheetPage extends StatefulWidget {
 class _SpreadsheetPageState extends State<SpreadsheetPage> {
   bool _settingsModified = false;
   late TextEditingController _electricityController;
+  late TextEditingController _averagePowerController;
   late TextEditingController _etsyFeesController;
   late TextEditingController _etsyListingFeeController;
   final Map<String, TextEditingController> _categoryControllers = {};
@@ -3986,6 +4009,8 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
     final s = context.read<DataBloc>().state.settings;
     _electricityController = TextEditingController(text: s.electricityCostKwh.toString())
       ..addListener(_onChanged);
+    _averagePowerController = TextEditingController(text: s.averagePowerWatts.toString())
+      ..addListener(_onChanged);
     _etsyFeesController = TextEditingController(text: s.etsyFeesPercent.toString())
       ..addListener(_onChanged);
     _etsyListingFeeController = TextEditingController(text: s.etsyListingFee.toString())
@@ -3995,6 +4020,7 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
   @override
   void dispose() {
     _electricityController.dispose();
+    _averagePowerController.dispose();
     _etsyFeesController.dispose();
     _etsyListingFeeController.dispose();
     for (final c in _categoryControllers.values) {
@@ -4022,6 +4048,7 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
 
     final newSettings = Settings.defaults()
       ..electricityCostKwh = double.tryParse(_electricityController.text) ?? state.settings.electricityCostKwh
+      ..averagePowerWatts = double.tryParse(_averagePowerController.text) ?? state.settings.averagePowerWatts
       ..etsyFeesPercent = double.tryParse(_etsyFeesController.text) ?? state.settings.etsyFeesPercent
       ..etsyListingFee = double.tryParse(_etsyListingFeeController.text) ?? state.settings.etsyListingFee;
 
@@ -4199,6 +4226,7 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
               runSpacing: 12,
               children: [
                 _globalField(_electricityController, 'Electricity \$/kWh'),
+                _globalField(_averagePowerController, 'Avg Printer Power (W)'),
                 _globalField(_etsyFeesController, 'Etsy Fees %'),
                 _globalField(_etsyListingFeeController, 'Listing Fee \$'),
               ],
@@ -4513,6 +4541,8 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
 
 class _ResultRow extends StatelessWidget {
   final String label;
+  final double materialCost;
+  final double electricityCost;
   final double cost;
   final double profit;
   final double price;
@@ -4523,7 +4553,20 @@ class _ResultRow extends StatelessWidget {
   final double? totalCost;
   final double? totalProfit;
 
-  const _ResultRow(this.label, this.cost, this.profit, this.price, this.suggestedPrice, this.originalPrice, this.totalPrice, this.numberOfModels, this.totalCost, this.totalProfit);
+  const _ResultRow({
+    required this.label,
+    required this.materialCost,
+    required this.electricityCost,
+    required this.cost,
+    required this.profit,
+    required this.price,
+    this.suggestedPrice,
+    this.originalPrice,
+    this.totalPrice,
+    this.numberOfModels,
+    this.totalCost,
+    this.totalProfit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -4540,15 +4583,17 @@ class _ResultRow extends StatelessWidget {
         children: [
           SizedBox(width: 50, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))),
           SizedBox(
-            width: 60,
+            width: 130,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text('Mat: \$${materialCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                Text('Elec: \$${electricityCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                 if (isMulticolor && totalCost != null) ...[
-                  Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
-                  Text('(Total: \$${totalCost!.toStringAsFixed(2)})', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: Colors.grey[500])),
+                  Text('Each: \$${cost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                  Text('Total: \$${totalCost!.toStringAsFixed(2)}', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
                 ] else ...[
-                  Text('\$${cost.toStringAsFixed(2)}', textAlign: TextAlign.center),
+                  Text('Total: \$${cost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                 ],
               ],
             ),
@@ -4619,4 +4664,3 @@ class _ResultRow extends StatelessWidget {
     );
   }
 }
-
