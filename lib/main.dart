@@ -3592,7 +3592,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with TickerProvid
         double profitAmount = 0;
         double originalPriceValue = 0;
         if (printTime > 0 && filamentGrams > 0) {
-        if (printTime > 0 && filamentGrams > 0) {
             final calculatedFilamentCost = _calculateFilamentCost(filamentGrams, category);
             final calculatedElectricityCost = _calculateElectricityCost(printTime, settings);
             
